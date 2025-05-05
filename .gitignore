@@ -1,8 +1,8 @@
-# Ignore data files
-data/
+# Ignore data files at the root level
+/data/
 
-# Ignore output files, logs, models, cache, etc.
-outputs/
+# Ignore output files, logs, models, cache, etc. at the root level
+/outputs/
 
 # Python specific ignores
 __pycache__/

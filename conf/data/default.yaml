@@ -1,0 +1,48 @@
+# Data configuration for the AE_LSTM project
+
+# Dataset settings
+dataset:
+  target_field: "salinity"
+  use_mini_dataset: false  # Use a smaller dataset for faster development
+  use_remote_data: false
+  use_cache: true
+  split_num: false
+  split_ratio:
+    train: 0.7145
+    val: 0.1427
+    test: 0.1428
+  
+# Data preprocessing
+preprocessing:
+  standardization: true  # Apply StandardScaler
+  normalize: false  # Apply MinMaxScaler (0-1)
+  mask_path: "${paths.raw_data_dir}/mask.npy"  # Path to mask file
+  apply_mask: false  # Whether to apply the mask to data
+
+# Sequence preparation for LSTM
+sequence:
+  sequence_length: 10  # Number of time steps to use as input
+  prediction_horizon: 1  # Number of time steps to predict ahead
+  stride: 1  # Stride between sequences
+  include_covariates: false  # Include additional variables like wind
+  covariate_fields: ["wind","runoff3"]  # List of covariates
+
+# Data augmentation options
+augmentation:
+  enabled: false
+  rotation: false
+  flip: false
+  noise:
+    enabled: true
+    std: 0.01  # Standard deviation of Gaussian noise
+
+# Batch settings
+batch_size:
+  train: 64
+  val: 128
+  test: 128
+
+# Data loading settings
+loader:
+  num_workers: 4  # Number of worker processes for data loading
+  pin_memory: true  # Use pinned memory for faster GPU transfer
