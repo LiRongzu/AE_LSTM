@@ -1,0 +1,59 @@
+# Visualization configuration for the AE_LSTM project
+
+# General visualization settings
+dpi: 300
+figsize: [10, 8]
+fontsize: 12
+cmap: "viridis"  # Default colormap
+save_format: "png"  # Output file format (png, jpg, pdf, etc.)
+
+# Plotting settings
+plot_settings:
+  grid: true
+  title_fontsize: 14
+  axis_label_fontsize: 12
+  tick_label_fontsize: 10
+  legend_fontsize: 10
+  colorbar: true
+  colorbar_label: "Value"
+
+# Specific visualization types
+reconstruction_plots:
+  enabled: true
+  num_samples: 5  # Number of samples to visualize
+  include_error: true  # Include error plots
+  error_cmap: "RdBu_r"  # Diverging colormap for errors
+
+prediction_plots:
+  enabled: true
+  num_timesteps: 5  # Number of future time steps to visualize
+  plot_ground_truth: true
+  plot_prediction: true
+  plot_error: true
+  error_cmap: "RdBu_r"
+
+latent_space:
+  enabled: true
+  plot_type: "pca"  # Options: pca, tsne, umap
+  perplexity: 30  # For t-SNE
+  n_neighbors: 15  # For UMAP
+
+# Animation settings
+animation:
+  enabled: false
+  fps: 5
+  duration: 10  # seconds
+
+# TensorBoard settings
+tensorboard:
+  enabled: true
+  log_gradients: true
+  log_weights: true
+  log_images: true
+  max_images: 10
+  
+# Metrics visualization
+metrics_plots:
+  enabled: true
+  metrics: ["rmse", "mae", "r2"]
+  plot_training_history: true

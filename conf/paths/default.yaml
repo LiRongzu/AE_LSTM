@@ -1,0 +1,26 @@
+# Paths configuration for the AE_LSTM project
+
+# Base directories
+base_dir: "${hydra:runtime.cwd}"
+data_dir: "${paths.base_dir}/data"
+output_dir: "${paths.base_dir}/outputs"
+
+# Data directories
+raw_data_dir: "${paths.data_dir}"
+processed_data_dir: "${paths.data_dir}/processed"
+mini_data_dir: "${paths.data_dir}/processed/mini"
+
+# Model directories
+model_dir: "${paths.output_dir}/models"
+ae_model_dir: "${paths.model_dir}/autoencoder"
+lstm_model_dir: "${paths.model_dir}/lstm"
+combined_model_dir: "${paths.model_dir}/ae_lstm"
+
+# Results and visualization directories
+results_dir: "${paths.output_dir}/results"
+visualization_dir: "${paths.output_dir}/visualizations"
+
+# Logs and metrics directories
+logs_dir: "${paths.output_dir}/logs"
+tensorboard_dir: "${paths.output_dir}/tensorboard"
+optuna_db: "${paths.output_dir}/optuna.db"

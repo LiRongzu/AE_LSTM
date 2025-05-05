@@ -1,0 +1,24 @@
+# Ignore data files
+data/
+
+# Ignore output files, logs, models, cache, etc.
+outputs/
+
+# Python specific ignores
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment specific ignores
+.env
+.venv
+venv/
+env/
+
+# IDE specific ignores
+.vscode/
+.idea/
+
+# OS specific ignores
+.DS_Store
+Thumbs.db

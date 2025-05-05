@@ -1,0 +1,74 @@
+# Training configuration
+
+# General training settings
+epochs: 100
+early_stopping_patience: 10
+checkpoint_frequency: 5
+validate_every: 1
+log_interval: 10
+
+# Autoencoder training
+autoencoder:
+  epochs: 100
+  learning_rate: 0.001
+  batch_size: 64
+  early_stopping:
+    patience: 10
+    min_delta: 0.0001
+  optimizer:
+    type: "Adam"
+    weight_decay: 1e-5
+  scheduler:
+    type: "ReduceLROnPlateau"
+    patience: 5
+    factor: 0.5
+    min_lr: 1e-6
+
+# LSTM training
+lstm:
+  epochs: 100
+  learning_rate: 0.001
+  batch_size: 32
+  early_stopping:
+    patience: 10
+    min_delta: 0.0001
+  optimizer:
+    type: "Adam"
+    weight_decay: 1e-5
+  scheduler:
+    type: "ReduceLROnPlateau"
+    patience: 5
+    factor: 0.5
+    min_lr: 1e-6
+
+# Combined AE-LSTM training
+ae_lstm:
+  epochs: 100
+  learning_rate: 0.0005
+  batch_size: 32
+  early_stopping:
+    patience: 10
+    min_delta: 0.0001
+  optimizer:
+    type: "Adam"
+    weight_decay: 1e-5
+  scheduler:
+    type: "ReduceLROnPlateau"
+    patience: 5
+    factor: 0.5
+    min_lr: 1e-6
+
+# Hyperparameter optimization with Optuna
+hyperparameter_optimization:
+  run: false
+  n_trials: 50
+  timeout: 86400  # 24 hours in seconds
+  study_name: "ae_lstm_optimization"
+  direction: "minimize"  # "minimize" for loss, "maximize" for accuracy
+  pruner:
+    type: "MedianPruner"
+    n_warmup_steps: 5
+    n_startup_trials: 10
+  sampler:
+    type: "TPESampler"
+  target_metric: "val_loss"

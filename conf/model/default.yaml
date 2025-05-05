@@ -1,0 +1,32 @@
+# Model configurations
+
+# Autoencoder configuration
+autoencoder:
+  type: "standard" # Options: standard, unet, masked
+  input_dim: 2000  # Adjust based on your data dimension
+  latent_dim: 32   # Latent space dimension
+  hidden_layers: [1000, 500, 100]  # Encoder hidden layers
+  activation: "ReLU"  # Activation function
+  dropout_rate: 0.2   # Dropout rate
+  learning_rate: 0.001
+  batch_size: 64
+  weight_decay: 1e-5
+
+# LSTM configuration
+lstm:
+  input_size: 32  # Should match autoencoder latent_dim
+  hidden_size: 64
+  num_layers: 2
+  output_size: 32  # Should match autoencoder latent_dim
+  dropout: 0.1
+  sequence_length: 10
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 1e-5
+
+# Combined AE-LSTM configuration
+ae_lstm:
+  use_pretrained_ae: true
+  use_pretrained_lstm: false
+  train_ae_end_to_end: false  # Whether to fine-tune AE during combined training
+  additional_input_features: 0  # Additional features like wind data
