@@ -11,11 +11,13 @@ dataset:
     train: 0.7145
     val: 0.1427
     test: 0.1428
-  
+
+
+
 # Data preprocessing
 preprocessing:
-  standardization: true  # Apply StandardScaler
-  normalize: false  # Apply MinMaxScaler (0-1)
+  standardization: false  # Apply StandardScaler
+  normalize: true  # Apply MinMaxScaler (0-1)
   mask_path: "${paths.raw_data_dir}/mask.npy"  # Path to mask file
   apply_mask: false  # Whether to apply the mask to data
 
@@ -25,7 +27,7 @@ sequence:
   prediction_horizon: 1  # Number of time steps to predict ahead
   stride: 1  # Stride between sequences
   include_covariates: false  # Include additional variables like wind
-  covariate_fields: ["wind","runoff3"]  # List of covariates
+  covariate_fields: ["wind","runoff"]  # List of covariates
 
 # Data augmentation options
 augmentation:
@@ -38,11 +40,15 @@ augmentation:
 
 # Batch settings
 batch_size:
-  train: 64
-  val: 128
-  test: 128
+  train: 8
+  val: 8
+  test: 8
 
 # Data loading settings
 loader:
   num_workers: 4  # Number of worker processes for data loading
   pin_memory: true  # Use pinned memory for faster GPU transfer
+
+vertices_file: "vertices.npy" # Or full path if not handled by paths.data_dir
+# Path to the file containing triangle definitions (indices of vertices)
+triangles_file: "triangles.npy" # Or full path

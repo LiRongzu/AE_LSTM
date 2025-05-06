@@ -104,25 +104,55 @@ class DataProcessor:
             # Store mask for later use
             processed_data['mask'] = mask
         
-        # Preprocess target data
         if self.standardize:
             # Fit scaler on training portion to avoid data leakage
-            train_end = int(self.train_ratio * target_data.shape[0])
+            train_end_idx = 0
+            if self.cfg.data.dataset.get('split_num', False):
+                train_end_idx = self.cfg.data.dataset.train_num
+            else:
+                train_end_idx = int(self.train_ratio * target_data.shape[0])
+            
             scaler = StandardScaler()
-            scaler.fit(target_data[:train_end])
+            scaler.fit(target_data[:train_end_idx])
+            
+            # Log scaler parameters
+            log.info(f"Target StandardScaler - Mean (first 5): {scaler.mean_[:5]}")
+            log.info(f"Target StandardScaler - Scale (std, first 5): {scaler.scale_[:5]}")
+            if np.any(scaler.scale_ == 0):
+                log.warning("Target StandardScaler has zero values in scale_ (std_dev)! Features with zero std: "
+                            f"{np.where(scaler.scale_ == 0)[0]}")
+            
             target_data = scaler.transform(target_data)
             self.scalers['target'] = scaler
             log.info(f"Standardized target data")
             
         elif self.normalize:
-            train_end = int(self.train_ratio * target_data.shape[0])
+            train_end_idx = 0
+            if self.cfg.data.dataset.get('split_num', False):
+                train_end_idx = self.cfg.data.dataset.train_num
+            else:
+                train_end_idx = int(self.train_ratio * target_data.shape[0])
+
             scaler = MinMaxScaler()
-            scaler.fit(target_data[:train_end])
+            scaler.fit(target_data[:train_end_idx])
+
+            # Log scaler parameters
+            log.info(f"Target MinMaxScaler - Min (first 5): {scaler.min_[:5]}")
+            log.info(f"Target MinMaxScaler - Scale (1/(data_max-data_min), first 5): {scaler.scale_[:5]}")
+            log.info(f"Target MinMaxScaler - Data Min (first 5): {scaler.data_min_[:5]}")
+            log.info(f"Target MinMaxScaler - Data Max (first 5): {scaler.data_max_[:5]}")
+            # Check for potential division by zero if data_max == data_min
+            data_range = scaler.data_max_ - scaler.data_min_
+            if np.any(data_range == 0):
+                log.warning("Target MinMaxScaler has zero range (data_max == data_min) for some features! "
+                            f"Features with zero range: {np.where(data_range == 0)[0]}")
+
             target_data = scaler.transform(target_data)
             self.scalers['target'] = scaler
             log.info(f"Normalized target data")
             
         processed_data['target'] = target_data
+
 
         # Process covariates individually
         if self.include_covariates:
@@ -237,6 +267,29 @@ class DataProcessor:
                     if field in processed_data: # Check if the covariate was successfully processed
                         processed_data[f'{split_name}_{field}'] = processed_data[field][split_slice]
                         log.info(f"{split_name} {field} shape: {processed_data[f'{split_name}_{field}'].shape}")
+
+        # Add checks for val_target before returning processed_data
+        if 'val_target' in processed_data:
+            val_target_np = processed_data['val_target']
+            if val_target_np.size > 0: # Proceed only if not empty
+                if np.any(np.isinf(val_target_np)):
+                    inf_count = np.sum(np.isinf(val_target_np))
+                    log.warning(f"Infinity found in 'val_target' (shape: {val_target_np.shape}) after scaling and splitting. Count: {inf_count}")
+                    # Example: log indices of first few inf values
+                    inf_indices = np.where(np.isinf(val_target_np))
+                    log.warning(f"First few inf indices in val_target: {tuple(idx[:5] for idx in inf_indices)}")
+                if np.any(np.isnan(val_target_np)):
+                    nan_count = np.sum(np.isnan(val_target_np))
+                    log.warning(f"NaN found in 'val_target' (shape: {val_target_np.shape}) after scaling and splitting. Count: {nan_count}")
+                    # Example: log indices of first few NaN values
+                    nan_indices = np.where(np.isnan(val_target_np))
+                    log.warning(f"First few NaN indices in val_target: {tuple(idx[:5] for idx in nan_indices)}")
+                
+                # Log min/max/mean to see if values are extreme, ignoring NaNs for these stats
+                log.info(f"Stats for 'val_target': Min={np.nanmin(val_target_np)}, Max={np.nanmax(val_target_np)}, Mean={np.nanmean(val_target_np)}")
+            else:
+                log.warning("'val_target' is empty after splitting.")
+
 
         # Remove full covariate fields after splitting to keep dict clean
         if self.include_covariates:

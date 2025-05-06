@@ -1,16 +1,14 @@
 #!/usr/bin/env python
 # src/model/ae_lstm.py - Combined autoencoder and LSTM model
 
+from src.model.autoencoder import AutoencoderModel
+from src.model.lstm import LSTMModel
+from omegaconf import DictConfig
 import torch
 import torch.nn as nn
 import numpy as np
 from typing import List, Tuple, Optional, Dict, Union, Any
-from omegaconf import DictConfig
 import logging
-
-# Import project models
-from src.model.autoencoder import AutoencoderModel
-from src.model.lstm import LSTMModel
 
 log = logging.getLogger(__name__)
 
@@ -20,23 +18,17 @@ class AELSTMModel(nn.Module):
     """
     def __init__(
         self,
-        autoencoder: nn.Module,
-        lstm: nn.Module,
+        autoencoder: AutoencoderModel,
+        lstm_model: LSTMModel,
         cfg: DictConfig
     ):
-        super(AELSTMModel, self).__init__()
-        self.cfg = cfg
+        super().__init__()
         self.autoencoder = autoencoder
-        self.lstm = lstm
+        self.lstm = lstm_model
         
-        # Additional parameters
-        self.additional_input_features = cfg.model.ae_lstm.get("additional_input_features", 0)
-        self.train_ae_end_to_end = cfg.model.ae_lstm.get("train_ae_end_to_end", False)
-        
-        # Freeze autoencoder if not training end-to-end
-        if not self.train_ae_end_to_end:
-            for param in self.autoencoder.parameters():
-                param.requires_grad = False
+        self.autoencoder_input_dim = self.autoencoder.input_dim
+        self.autoencoder_latent_dim = self.autoencoder.latent_dim
+        log.info(f"AELSTMModel initialized. AE input_dim: {self.autoencoder_input_dim}, AE latent_dim: {self.autoencoder_latent_dim}")
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -48,44 +40,60 @@ class AELSTMModel(nn.Module):
         Returns:
             Output tensor of shape [batch_size, output_dim]
         """
-        batch_size, seq_len, input_dim = x.shape
-        device = x.device
+        feature_dim_of_x = x.shape[-1]
         
-        # Split input into main features and additional features if needed
-        if self.additional_input_features > 0:
-            main_features = x[:, :, :-self.additional_input_features]
-            additional_features = x[:, :, -self.additional_input_features:]
-        else:
-            main_features = x
-            additional_features = None
-        
-        # Encode each time step through autoencoder
-        encoded_sequence = []
-        
-        for t in range(seq_len):
-            # Get features for current time step
-            current_features = main_features[:, t, :]
+        if feature_dim_of_x == self.autoencoder_input_dim:
+            # Input 'x' is raw features.
+            log.debug(f"AELSTMModel forward: raw input x shape: {x.shape}")
+            batch_size, seq_len, _ = x.shape
+            x_reshaped = x.reshape(-1, self.autoencoder_input_dim)
+            latent_reshaped = self.autoencoder.encode(x_reshaped)
+            latent_sequence = latent_reshaped.reshape(batch_size, seq_len, self.autoencoder_latent_dim)
             
-            # Encode
-            latent = self.autoencoder.encode(current_features)
-            encoded_sequence.append(latent)
-        
-        # Stack encoded features
-        encoded_sequence = torch.stack(encoded_sequence, dim=1)  # [batch_size, seq_len, latent_dim]
-        
-        # Combine with additional features if needed
-        if additional_features is not None:
-            lstm_input = torch.cat([encoded_sequence, additional_features], dim=2)
+            if latent_sequence.shape[1] <= 1: # seq_len <=1
+                log.warning(f"AELSTMModel raw input path: seq_len ({latent_sequence.shape[1]}) <= 1. Using full latent_sequence for LSTM.")
+                lstm_input_sequence = latent_sequence
+            else:
+                lstm_input_sequence = latent_sequence[:, :-1, :]
+            
+        elif feature_dim_of_x == self.autoencoder_latent_dim:
+            # Input 'x' is already latent codes.
+            log.debug(f"AELSTMModel forward: latent input x shape: {x.shape}")
+            if x.ndim == 2:
+                log.debug("AELSTMModel forward: latent input x is 2D. Unsqueezing to add seq_len=1.")
+                lstm_input_sequence = x.unsqueeze(1)
+            elif x.ndim == 3:
+                current_seq_len = x.shape[1]
+                if current_seq_len == 0:
+                    raise ValueError("AELSTMModel: Latent input x (3D) has sequence length 0.")
+                elif current_seq_len == 1:
+                    log.debug("AELSTMModel forward: latent input x is 3D with seq_len=1. Using x directly for LSTM.")
+                    lstm_input_sequence = x
+                else: # current_seq_len > 1
+                    log.debug(f"AELSTMModel forward: latent input x is 3D with seq_len={current_seq_len}. Using x[:, :-1, :] for LSTM.")
+                    lstm_input_sequence = x[:, :-1, :]
+            else:
+                raise ValueError(
+                    f"AELSTMModel: Latent input x has unexpected ndim {x.ndim}. Expected 2 or 3. Shape: {x.shape}"
+                )
+            
         else:
-            lstm_input = encoded_sequence
+            raise ValueError(
+                f"AELSTMModel: Input feature dimension {feature_dim_of_x} (shape {x.shape}) is unexpected. "
+                f"Expected autoencoder_input_dim ({self.autoencoder_input_dim}) "
+                f"or autoencoder_latent_dim ({self.autoencoder_latent_dim})."
+            )
+            
+        log.debug(f"AELSTMModel: lstm_input_sequence shape: {lstm_input_sequence.shape}")
+        predicted_latent_codes = self.lstm(lstm_input_sequence)
+        # The output of self.lstm (LSTMModel) should be the predicted latent code(s).
+        # Shape could be (batch_size, latent_dim) or (batch_size, some_seq_len, latent_dim)
+        # depending on LSTMModel's fc layer and predict_last_only config.
+
+        # Decode the predicted latent codes to get final predictions in original feature space.
+        final_predictions = self.autoencoder.decode(predicted_latent_codes)
         
-        # Predict with LSTM
-        latent_pred = self.lstm(lstm_input)  # [batch_size, latent_dim]
-        
-        # Decode prediction
-        output = self.autoencoder.decode(latent_pred)  # [batch_size, output_dim]
-        
-        return output
+        return final_predictions
     
     def predict_sequence(
         self, 

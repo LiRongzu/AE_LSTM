@@ -26,12 +26,6 @@ from src.train.train_autoencoder import train_autoencoder
 from src.train.train_lstm import train_lstm
 from src.train.train_ae_lstm import train_ae_lstm
 from src.utils.evaluation import evaluate_model
-from src.visualization.visualize import (
-    plot_reconstruction_samples,
-    plot_prediction_samples,
-    plot_loss_curves,
-    plot_metrics
-)
 
 log = logging.getLogger(__name__)
 
@@ -136,15 +130,33 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     # 6. Evaluation
     log.info("Evaluating models")
     
-    # Evaluate autoencoder reconstruction
-    ae_metrics = evaluate_model(
-        autoencoder, 
-        test_dataset_ae, 
-        cfg, 
-        device,
-        model_type="autoencoder"
-    )
-    
+    # # Evaluate autoencoder reconstruction
+    # ae_metrics = evaluate_model(
+    #     autoencoder, 
+    #     test_dataset_ae, 
+    #     cfg, 
+    #     device,
+    #     model_type="autoencoder"
+    # )
+    if cfg.model.ae_lstm.train_ae_end_to_end:
+        # Evaluate AE-LSTM prediction
+        lstm_metrics = evaluate_model(
+            ae_lstm_model,
+            test_dataset_lstm,
+            cfg,
+            device,
+            model_type="ae_lstm"
+        )
+    else:
+        # Evaluate LSTM prediction
+        lstm_metrics = evaluate_model(
+            lstm_model,
+            test_dataset_lstm,
+            cfg,
+            device,
+            autoencoder_model=autoencoder,
+            model_type="lstm"
+        )
     # Evaluate LSTM prediction
     lstm_metrics = evaluate_model(
         ae_lstm_model,
@@ -153,30 +165,6 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
         device,
         model_type="ae_lstm"
     )
-    
-    # 7. Visualization
-    log.info("Generating visualizations")
-    
-    # Plot reconstruction samples
-    plot_reconstruction_samples(
-        autoencoder,
-        test_dataset_ae,
-        cfg,
-        device,
-        n_samples=5
-    )
-    
-    # Plot prediction samples
-    plot_prediction_samples(
-        ae_lstm_model,
-        test_dataset_lstm,
-        cfg,
-        device,
-        n_samples=5
-    )
-    
-    # Plot metrics
-    plot_metrics(ae_metrics, lstm_metrics, cfg)
     
     # Close TensorBoard writer
     if writer:

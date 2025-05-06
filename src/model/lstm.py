@@ -19,21 +19,28 @@ class LSTMModel(nn.Module):
         self.cfg = cfg
         
         # LSTM parameters
-        self.input_size = cfg.model.lstm.input_size
+        self.input_size = cfg.model.lstm.input_size # 这应该是潜在变量的维度
         self.hidden_size = cfg.model.lstm.hidden_size
         self.num_layers = cfg.model.lstm.num_layers
-        self.output_size = cfg.model.lstm.output_size
+        self.output_size = cfg.model.lstm.output_size # 这通常与 input_size 相同，如果LSTM预测的是下一个潜在状态
         self.dropout = cfg.model.lstm.dropout
+        
+        # Layer Normalization for the input
+        # LayerNorm 会对最后一个维度（input_size/特征维度）进行归一化
+        self.input_layernorm = nn.LayerNorm(self.input_size) 
         
         # LSTM layer
         self.lstm = nn.LSTM(
             input_size=self.input_size,
             hidden_size=self.hidden_size,
             num_layers=self.num_layers,
-            batch_first=True,
+            batch_first=True, # batch_first=True 表示输入和输出张量的形状为 (batch, seq, feature)
             dropout=self.dropout if self.num_layers > 1 else 0
         )
         
+        # Optional: Layer Normalization for the LSTM output's hidden states
+        # self.output_layernorm = nn.LayerNorm(self.hidden_size)
+
         # Output layer
         self.fc = nn.Linear(self.hidden_size, self.output_size)
         
@@ -41,7 +48,7 @@ class LSTMModel(nn.Module):
         self, 
         x: torch.Tensor, 
         hidden: Optional[Tuple[torch.Tensor, torch.Tensor]] = None
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]: # 注意: 原始返回类型包含 hidden，如果只返回 out，可以简化
         """
         Forward pass through LSTM.
         
@@ -52,13 +59,13 @@ class LSTMModel(nn.Module):
         Returns:
             Output tensor and optional hidden state
         """
-        # LSTM forward pass
-        lstm_out, hidden = self.lstm(x, hidden)
+        x_normalized = self.input_layernorm(x)
         
-        # Get prediction from last time step
+        lstm_out, hidden_state_out = self.lstm(x_normalized, hidden) 
+        
         out = self.fc(lstm_out[:, -1, :])
-        
-        return out
+
+        return out 
     
     def predict_sequence(
         self, 
