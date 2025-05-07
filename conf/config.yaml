@@ -18,45 +18,45 @@ hydra:
     dir: ${paths.output_dir}/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ${hydra.job.num}
   # Optuna Sweeper Configuration
-  # sweeper:
-  #   # Use the fully qualified name
-  #   type: hydra_plugins.hydra_optuna_sweeper.optuna_sweeper.OptunaSweeper 
-  #   sampler:
-  #     # Use _target_ for Optuna samplers
-  #     _target_: optuna.samplers.TPESampler
-  #     seed: ${experiment.seed} # Use the same seed for reproducibility
-  #   direction: minimize # Minimize the objective (e.g., validation/test loss/rmse)
-  #   study_name: ${experiment.name}_sweep
-  #   # Correct the storage path if needed (using path from paths/default.yaml)
-  #   storage: sqlite:///${paths.optuna_db} 
-  #   # Or keep relative to original CWD:
-  #   # storage: sqlite:///optuna_studies.db 
-  #   n_trials: 50 # Increase number of trials for better search
-  #   # Define hyperparameter search space
-  #   params:
-  #     # Autoencoder Model Params
-  #     model.autoencoder.latent_dim: choice(16, 32, 64, 128)
-  #     model.autoencoder.hidden_layers: choice("[500, 100]", "[1000, 500, 100]", "[1500, 750, 200]") # Example layer structures
-  #     model.autoencoder.dropout_rate: float(0.0, 0.5, step=0.1)
+  sweeper:
+    # Use the fully qualified name
+    type: hydra_plugins.hydra_optuna_sweeper.optuna_sweeper.OptunaSweeper 
+    sampler:
+      # Use _target_ for Optuna samplers
+      _target_: optuna.samplers.TPESampler
+      seed: ${experiment.seed} # Use the same seed for reproducibility
+    direction: minimize # Minimize the objective (e.g., validation/test loss/rmse)
+    study_name: ${experiment.name}_sweep
+    # Correct the storage path if needed (using path from paths/default.yaml)
+    storage: sqlite:///${paths.optuna_db} 
+    # Or keep relative to original CWD:
+    # storage: sqlite:///optuna_studies.db 
+    n_trials: 2 # Increase number of trials for better search
+    # Define hyperparameter search space
+    params:
+      # Autoencoder Model Params
+      model.autoencoder.latent_dim: choice(16, 32, 64, 128)
+      model.autoencoder.hidden_layers: choice("[500, 100]", "[1000, 500, 100]", "[1500, 750, 200]") # Example layer structures
+      model.autoencoder.dropout_rate: float(0.0, 0.5, step=0.1)
 
-  #     # LSTM Model Params
-  #     model.lstm.hidden_size: choice(32, 64, 128, 256)
-  #     model.lstm.num_layers: choice(1, 2, 3)
-  #     model.lstm.dropout: float(0.0, 0.5, step=0.1)
+      # LSTM Model Params
+      model.lstm.hidden_size: choice(32, 64, 128, 256)
+      model.lstm.num_layers: choice(1, 2, 3)
+      model.lstm.dropout: float(0.0, 0.5, step=0.1)
 
-  #     # Training Params (can choose to optimize per model or globally)
-  #     # Example: Optimizing AE training params
-  #     train.autoencoder.learning_rate: float(1e-5, 1e-2, log=True)
-  #     train.autoencoder.optimizer.weight_decay: float(1e-6, 1e-3, log=True)
-  #     train.autoencoder.batch_size: choice(32, 64, 128)
+      # Training Params (can choose to optimize per model or globally)
+      # Example: Optimizing AE training params
+      train.autoencoder.learning_rate: float(1e-5, 1e-2, log=True)
+      train.autoencoder.optimizer.weight_decay: float(1e-6, 1e-3, log=True)
+      train.autoencoder.batch_size: choice(32, 64, 128)
 
-  #     # Example: Optimizing LSTM training params
-  #     train.lstm.learning_rate: float(1e-5, 1e-2, log=True)
-  #     train.lstm.optimizer.weight_decay: float(1e-6, 1e-3, log=True)
-  #     train.lstm.batch_size: choice(16, 32, 64)
+      # Example: Optimizing LSTM training params
+      train.lstm.learning_rate: float(1e-5, 1e-2, log=True)
+      train.lstm.optimizer.weight_decay: float(1e-6, 1e-3, log=True)
+      train.lstm.batch_size: choice(16, 32, 64)
 
-  #     # Data Params (if needed)
-  #     # data.sequence.sequence_length: choice(5, 10, 15)
+      # Data Params (if needed)
+      data.sequence.sequence_length: choice(5, 10, 15)
 
 # Experiment settings
 experiment:
