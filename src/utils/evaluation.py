@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # src/utils/evaluation.py - Model evaluation utilities
 
+from ast import Num
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -87,7 +88,7 @@ def calculate_metrics(
 def evaluate_model(
     model: torch.nn.Module,
     test_loader: DataLoader,
-    targetset: Dataset,
+    y_true: np.ndarray,
     cfg: DictConfig,
     device: torch.device,
     model_type: str = "lstm",
@@ -228,7 +229,6 @@ def evaluate_model(
     log.info(f"Final shapes -  Predictions: {all_predictions.shape}")
 
     # Calculate metrics
-    y_true = targetset.tensors[0].cpu().numpy()
     y_true = y_true[-all_predictions.shape[0]:]
     metrics = calculate_metrics(y_true, all_predictions)
 

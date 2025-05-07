@@ -39,7 +39,7 @@ class LSTMModel(nn.Module):
         )
         
         # Optional: Layer Normalization for the LSTM output's hidden states
-        # self.output_layernorm = nn.LayerNorm(self.hidden_size)
+        self.output_layernorm = nn.LayerNorm(self.hidden_size)
 
         # Output layer
         self.fc = nn.Linear(self.hidden_size, self.output_size)

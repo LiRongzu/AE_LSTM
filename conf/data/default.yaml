@@ -12,12 +12,10 @@ dataset:
     val: 0.1427
     test: 0.1428
 
-
-
 # Data preprocessing
 preprocessing:
-  standardization: false  # Apply StandardScaler
-  normalize: true  # Apply MinMaxScaler (0-1)
+  standardization: true  # Apply StandardScaler
+  normalize: false  # Apply MinMaxScaler (0-1)
   mask_path: "${paths.raw_data_dir}/mask.npy"  # Path to mask file
   apply_mask: false  # Whether to apply the mask to data
 

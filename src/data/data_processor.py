@@ -105,26 +105,44 @@ class DataProcessor:
             processed_data['mask'] = mask
         
         if self.standardize:
-            # Fit scaler on training portion to avoid data leakage
             train_end_idx = 0
             if self.cfg.data.dataset.get('split_num', False):
                 train_end_idx = self.cfg.data.dataset.train_num
             else:
                 train_end_idx = int(self.train_ratio * target_data.shape[0])
+
+            training_slice_for_scaler = target_data[:train_end_idx, :]
             
-            scaler = StandardScaler()
-            scaler.fit(target_data[:train_end_idx])
-            
-            # Log scaler parameters
-            log.info(f"Target StandardScaler - Mean (first 5): {scaler.mean_[:5]}")
-            log.info(f"Target StandardScaler - Scale (std, first 5): {scaler.scale_[:5]}")
-            if np.any(scaler.scale_ == 0):
-                log.warning("Target StandardScaler has zero values in scale_ (std_dev)! Features with zero std: "
-                            f"{np.where(scaler.scale_ == 0)[0]}")
-            
-            target_data = scaler.transform(target_data)
-            self.scalers['target'] = scaler
-            log.info(f"Standardized target data")
+            if training_slice_for_scaler.size == 0:
+                log.error("Training slice for scaler is empty! Cannot fit scaler.")
+                # 根据你的逻辑，这里可能需要抛出异常或采取其他错误处理
+                # 为简化，我们假设 training_slice_for_scaler 不会为空
+            else:
+                # Reshape training data for global scaling: (n_samples * n_features, 1)
+                original_train_shape = training_slice_for_scaler.shape
+                reshaped_train_data = training_slice_for_scaler.reshape(-1, 1)
+                log.info(f"Reshaped training data from {original_train_shape} to {reshaped_train_data.shape} for global StandardScaler fitting.")
+
+                scaler = StandardScaler()
+                scaler.fit(reshaped_train_data)
+
+                # Log global scaler parameters (they are now single values)
+                log.info(f"Global Target StandardScaler - Mean: {scaler.mean_[0]}")
+                log.info(f"Global Target StandardScaler - Scale (std): {scaler.scale_[0]}")
+                if scaler.scale_[0] == 0:
+                    log.warning("Global Target StandardScaler has a zero value in scale_ (std_dev)!")
+                
+                # Transform the entire target_data globally
+                original_full_data_shape = target_data.shape
+                reshaped_full_data = target_data.reshape(-1, 1)
+                
+                transformed_data_1d = scaler.transform(reshaped_full_data)
+                
+                # Reshape back to original 2D shape
+                target_data = transformed_data_1d.reshape(original_full_data_shape)
+                
+                self.scalers['target'] = scaler
+                log.info(f"Globally standardized target data. Final shape: {target_data.shape}")
             
         elif self.normalize:
             train_end_idx = 0
@@ -133,23 +151,40 @@ class DataProcessor:
             else:
                 train_end_idx = int(self.train_ratio * target_data.shape[0])
 
-            scaler = MinMaxScaler()
-            scaler.fit(target_data[:train_end_idx])
+            training_slice_for_scaler = target_data[:train_end_idx, :]
 
-            # Log scaler parameters
-            log.info(f"Target MinMaxScaler - Min (first 5): {scaler.min_[:5]}")
-            log.info(f"Target MinMaxScaler - Scale (1/(data_max-data_min), first 5): {scaler.scale_[:5]}")
-            log.info(f"Target MinMaxScaler - Data Min (first 5): {scaler.data_min_[:5]}")
-            log.info(f"Target MinMaxScaler - Data Max (first 5): {scaler.data_max_[:5]}")
-            # Check for potential division by zero if data_max == data_min
-            data_range = scaler.data_max_ - scaler.data_min_
-            if np.any(data_range == 0):
-                log.warning("Target MinMaxScaler has zero range (data_max == data_min) for some features! "
-                            f"Features with zero range: {np.where(data_range == 0)[0]}")
+            if training_slice_for_scaler.size == 0:
+                log.error("Training slice for scaler is empty! Cannot fit scaler.")
+            else:
+                # Reshape training data for global scaling: (n_samples * n_features, 1)
+                original_train_shape = training_slice_for_scaler.shape
+                reshaped_train_data = training_slice_for_scaler.reshape(-1, 1)
+                log.info(f"Reshaped training data from {original_train_shape} to {reshaped_train_data.shape} for global MinMaxScaler fitting.")
 
-            target_data = scaler.transform(target_data)
-            self.scalers['target'] = scaler
-            log.info(f"Normalized target data")
+                scaler = MinMaxScaler() # 你可以选择指定 feature_range, e.g., feature_range=(0, 1)
+                scaler.fit(reshaped_train_data)
+
+                # Log global scaler parameters
+                log.info(f"Global Target MinMaxScaler - Min: {scaler.min_[0]} (Actual value used for scaling)") # scaler.min_ is (X_min - data_min_) * scale_ + feature_range_min
+                log.info(f"Global Target MinMaxScaler - Scale (1/(data_max-data_min) adjusted for feature_range): {scaler.scale_[0]}")
+                log.info(f"Global Target MinMaxScaler - Data Min (learned from data): {scaler.data_min_[0]}")
+                log.info(f"Global Target MinMaxScaler - Data Max (learned from data): {scaler.data_max_[0]}")
+                
+                global_data_range = scaler.data_max_[0] - scaler.data_min_[0]
+                if global_data_range == 0:
+                    log.warning("Global Target MinMaxScaler has zero range (data_max == data_min)!")
+
+                # Transform the entire target_data globally
+                original_full_data_shape = target_data.shape
+                reshaped_full_data = target_data.reshape(-1, 1)
+                
+                transformed_data_1d = scaler.transform(reshaped_full_data)
+                
+                # Reshape back to original 2D shape
+                target_data = transformed_data_1d.reshape(original_full_data_shape)
+                
+                self.scalers['target'] = scaler
+                log.info(f"Globally normalized target data. Final shape: {target_data.shape}")
             
         processed_data['target'] = target_data
 
@@ -256,6 +291,7 @@ class DataProcessor:
             'val': slice(train_end, val_end),
             'test': slice(val_end, test_end) # Use test_end calculated above
         }
+
 
         # Split target and individual covariates
         for split_name, split_slice in splits.items():
@@ -476,7 +512,7 @@ class DataProcessor:
         # Create sequences
         train_x, train_y = self.create_sequences(train_latent, train_covs)
         val_x, val_y = self.create_sequences(val_latent, val_covs)
-        test_x, test_y = self.create_sequences(test_latent, test_covs)
+        test_x, test_y = self.create_sequences(test_latent, test_covariates)
         
         # Convert to tensors
         train_x_tensor = torch.FloatTensor(train_x)

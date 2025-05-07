@@ -151,7 +151,7 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
         lstm_val_metrics = evaluate_model(
             ae_lstm_model,
             val_dataset_ae,
-            val_dataset_ae,
+            val_dataset_ae.tensors[0].cpu().numpy(),
             cfg,
             device,
             model_type="ae_lstm"
@@ -161,21 +161,13 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
         lstm_val_metrics = evaluate_model(
             lstm_model,
             val_loader,
-            val_dataset_ae,
+            val_dataset_ae.tensors[0].cpu().numpy(),
             cfg,
             device,
             autoencoder_model=autoencoder,
             model_type="lstm"
         )
-    # # Evaluate LSTM prediction
-    # lstm_metrics = evaluate_model(
-    #     ae_lstm_model,
-    #     test_dataset_lstm,
-    #     cfg,
-    #     device,
-    #     model_type="ae_lstm"
-    # )
-    
+
     # Close TensorBoard writer
     if writer:
         writer.close()
