@@ -128,7 +128,7 @@ def evaluate_model(
                     scaler = None
             else:
                 log.warning(f"Scaler path {scaler} not found. Proceeding without scaler.")
-            scaler = None
+                scaler = None
 
 
 
@@ -230,6 +230,8 @@ def evaluate_model(
 
     # Calculate metrics
     y_true = y_true[-all_predictions.shape[0]:]
+    y_true = scaler.inverse_transform(y_true.reshape(-1, y_true.shape[-1])).reshape(y_true.shape)
+
     metrics = calculate_metrics(y_true, all_predictions)
 
     log.info("Metrics calculated:")

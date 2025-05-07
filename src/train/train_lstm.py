@@ -103,14 +103,14 @@ def train_lstm(
             # Update statistics
             epoch_loss += loss.item()
             
-            # Log batch progress
-            if batch_idx % cfg.train.log_interval == 0:
-                log.info(f"Epoch {epoch+1}/{epochs} | Batch {batch_idx}/{len(train_loader)} | Loss: {loss.item():.6f}")
+            # # Log batch progress
+            # if batch_idx % cfg.train.log_interval == 0:
+            #     log.info(f"Epoch {epoch+1}/{epochs} | Batch {batch_idx}/{len(train_loader)} | Loss: {loss.item():.6f}")
                 
-                # Log to TensorBoard
-                if writer:
-                    global_step = epoch * len(train_loader) + batch_idx
-                    writer.add_scalar('train/batch_loss', loss.item(), global_step)
+            #     # Log to TensorBoard
+            #     if writer:
+            #         global_step = epoch * len(train_loader) + batch_idx
+            #         writer.add_scalar('train/batch_loss', loss.item(), global_step)
         
         # Calculate average epoch loss
         avg_train_loss = epoch_loss / len(train_loader)

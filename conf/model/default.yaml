@@ -2,7 +2,7 @@
 
 # Autoencoder configuration
 autoencoder:
-  type: "standard" # Options: standard, unet, masked
+  type: "masked" # Options: standard, unet, masked
   input_dim: 201640  # Adjust based on your data dimension
   latent_dim: 32   # Latent space dimension
   hidden_layers: [256, 128, 64]  # Encoder hidden layers

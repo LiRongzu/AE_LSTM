@@ -43,7 +43,7 @@ class EarlyStopping:
             self.counter = 0
         else:
             self.counter += 1
-            log.info(f"EarlyStopping counter: {self.counter} out of {self.patience}") # 只在未改善时打印
+            # log.info(f"EarlyStopping counter: {self.counter} out of {self.patience}") # 只在未改善时打印
 
         if self.counter >= self.patience:
             self.early_stop = True

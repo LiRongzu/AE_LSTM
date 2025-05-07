@@ -512,7 +512,7 @@ class DataProcessor:
         # Create sequences
         train_x, train_y = self.create_sequences(train_latent, train_covs)
         val_x, val_y = self.create_sequences(val_latent, val_covs)
-        test_x, test_y = self.create_sequences(test_latent, test_covariates)
+        test_x, test_y = self.create_sequences(test_latent, test_covs)
         
         # Convert to tensors
         train_x_tensor = torch.FloatTensor(train_x)
