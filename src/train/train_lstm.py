@@ -18,8 +18,8 @@ log = logging.getLogger(__name__)
 
 def train_lstm(
     model: nn.Module,
-    train_dataset: Dataset,
-    val_dataset: Dataset,
+    train_loader: DataLoader,
+    val_loader: DataLoader,
     cfg: DictConfig,
     device: torch.device,
     writer: Optional[SummaryWriter] = None
@@ -43,22 +43,6 @@ def train_lstm(
     batch_size = cfg.model.lstm.batch_size
     learning_rate = cfg.model.lstm.learning_rate
     weight_decay = cfg.model.lstm.weight_decay
-    
-    # Create data loaders
-    train_loader = DataLoader(
-        train_dataset, 
-        batch_size=batch_size, 
-        shuffle=True,
-        num_workers=cfg.data.loader.num_workers,
-        pin_memory=cfg.data.loader.pin_memory
-    )
-    val_loader = DataLoader(
-        val_dataset, 
-        batch_size=batch_size, 
-        shuffle=False,
-        num_workers=cfg.data.loader.num_workers,
-        pin_memory=cfg.data.loader.pin_memory
-    )
     
     # Create optimizer
     optimizer = optim.Adam(

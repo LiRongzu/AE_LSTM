@@ -16,60 +16,40 @@ from omegaconf import DictConfig
 log = logging.getLogger(__name__)
 
 class EarlyStopping:
-    """
-    Early stopping handler to prevent overfitting.
-    """
-    def __init__(
-        self, 
-        patience: int = 10, 
-        min_delta: float = 0.0, 
-        mode: str = "min"
-    ):
-        """
-        Initialize early stopping.
-        
-        Args:
-            patience: Number of epochs to wait before stopping
-            min_delta: Minimum change in monitored value to qualify as improvement
-            mode: 'min' for loss, 'max' for metrics like accuracy
-        """
+    def __init__(self, patience: int = 10, min_delta: float = 0.0, mode: str = "min"):
         self.patience = patience
         self.min_delta = min_delta
         self.mode = mode
         self.counter = 0
-        self.best_score = float('inf') if mode == 'min' else float('-inf')
         self.early_stop = False
-        
-    def __call__(self, val_metric: float) -> bool:
-        """
-        Check if training should stop.
-        
-        Args:
-            val_metric: Current validation metric value
-            
-        Returns:
-            True if should stop, False otherwise
-        """
-        if self.mode == 'min':
-            score = -val_metric
-        else:
-            score = val_metric
-            
-        if self.best_score is None:
-            self.best_score = score
-            return False
-            
-        if score < self.best_score + self.min_delta:
-            self.counter += 1
-            log.info(f"EarlyStopping counter: {self.counter} out of {self.patience}")
-            if self.counter >= self.patience:
-                self.early_stop = True
-                return True
-        else:
-            self.best_score = score
+        if self.mode == "min":
+            self.best_metric_val = float('inf') # 直接存储最佳的度量值
+        else: # mode == "max"
+            self.best_metric_val = float('-inf')
+
+    def __call__(self, current_metric_val: float) -> bool:
+        has_improved = False
+        if self.mode == "min":
+            # 如果当前度量值比历史最佳值改善了（考虑 min_delta）
+            if current_metric_val < self.best_metric_val - self.min_delta:
+                self.best_metric_val = current_metric_val
+                has_improved = True
+        else: # mode == "max"
+            if current_metric_val > self.best_metric_val + self.min_delta:
+                self.best_metric_val = current_metric_val
+                has_improved = True
+
+        if has_improved:
             self.counter = 0
-            
-        return False
+        else:
+            self.counter += 1
+            log.info(f"EarlyStopping counter: {self.counter} out of {self.patience}") # 只在未改善时打印
+
+        if self.counter >= self.patience:
+            self.early_stop = True
+            return True # 应该停止
+
+        return False # 不应该停止
 
 
 def train_autoencoder(

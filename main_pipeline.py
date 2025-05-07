@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, Tuple
 import hydra
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard import SummaryWriter
-
+from torch.utils.data import DataLoader
 # Import project modules
 from src.utils.setup import (
     setup_experiment, 
@@ -102,7 +102,23 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     train_dataset_lstm, val_dataset_lstm, test_dataset_lstm = data_processor.create_sequence_datasets(
         train_latent, val_latent, test_latent, processed_data
     )
-    
+
+    batch_size = cfg.model.lstm.batch_size
+    train_loader = DataLoader(
+        train_dataset_lstm, 
+        batch_size=batch_size, 
+        shuffle=True,
+        num_workers=cfg.data.loader.num_workers,
+        pin_memory=cfg.data.loader.pin_memory
+    )
+    val_loader = DataLoader(
+        val_dataset_lstm, 
+        batch_size=batch_size, 
+        shuffle=False,
+        num_workers=cfg.data.loader.num_workers,
+        pin_memory=cfg.data.loader.pin_memory
+    )
+
     # 4. Train or load LSTM
     lstm_model = LSTMModel(cfg).to(device)
     
@@ -114,10 +130,10 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
             log.info(f"Loaded pretrained LSTM from {lstm_path}")
         else:
             log.warning(f"No pretrained LSTM found at {lstm_path}. Training new model.")
-            train_lstm(lstm_model, train_dataset_lstm, val_dataset_lstm, cfg, device, writer)
+            train_lstm(lstm_model, train_loader, val_loader, cfg, device, writer)
     else:
         # Train LSTM from scratch
-        train_lstm(lstm_model, train_dataset_lstm, val_dataset_lstm, cfg, device, writer)
+        train_lstm(lstm_model, train_loader, val_loader, cfg, device, writer)
     
     # 5. Combined AE-LSTM model (optional fine-tuning)
     ae_lstm_model = AELSTMModel(autoencoder, lstm_model, cfg).to(device)
@@ -130,41 +146,35 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     # 6. Evaluation
     log.info("Evaluating models")
     
-    # # Evaluate autoencoder reconstruction
-    # ae_metrics = evaluate_model(
-    #     autoencoder, 
-    #     test_dataset_ae, 
-    #     cfg, 
-    #     device,
-    #     model_type="autoencoder"
-    # )
     if cfg.model.ae_lstm.train_ae_end_to_end:
         # Evaluate AE-LSTM prediction
-        lstm_metrics = evaluate_model(
+        lstm_val_metrics = evaluate_model(
             ae_lstm_model,
-            test_dataset_lstm,
+            val_dataset_ae,
+            val_dataset_ae,
             cfg,
             device,
             model_type="ae_lstm"
         )
     else:
         # Evaluate LSTM prediction
-        lstm_metrics = evaluate_model(
+        lstm_val_metrics = evaluate_model(
             lstm_model,
-            test_dataset_lstm,
+            val_loader,
+            val_dataset_ae,
             cfg,
             device,
             autoencoder_model=autoencoder,
             model_type="lstm"
         )
-    # Evaluate LSTM prediction
-    lstm_metrics = evaluate_model(
-        ae_lstm_model,
-        test_dataset_lstm,
-        cfg,
-        device,
-        model_type="ae_lstm"
-    )
+    # # Evaluate LSTM prediction
+    # lstm_metrics = evaluate_model(
+    #     ae_lstm_model,
+    #     test_dataset_lstm,
+    #     cfg,
+    #     device,
+    #     model_type="ae_lstm"
+    # )
     
     # Close TensorBoard writer
     if writer:
@@ -174,7 +184,7 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     
     # Return the primary metric for Optuna optimization
     # Assuming we want to minimize the RMSE of the final AE-LSTM prediction
-    final_metric = lstm_metrics['metrics'].get('rmse', float('inf')) # Default to infinity if RMSE not found
+    final_metric = lstm_val_metrics['metrics'].get('rmse', float('inf')) # Default to infinity if RMSE not found
     log.info(f"Returning metric for Optuna: {final_metric}")
     return final_metric
 

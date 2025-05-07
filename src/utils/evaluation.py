@@ -3,12 +3,13 @@
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 from omegaconf import DictConfig
-
+import joblib
+import os
 log = logging.getLogger(__name__) # Ensure logger is defined
 
 def calculate_metrics(
@@ -86,6 +87,7 @@ def calculate_metrics(
 def evaluate_model(
     model: torch.nn.Module,
     test_loader: DataLoader,
+    targetset: Dataset,
     cfg: DictConfig,
     device: torch.device,
     model_type: str = "lstm",
@@ -114,7 +116,21 @@ def evaluate_model(
     model.eval()
     all_predictions_list = []
     all_targets_list = []
-    
+    scaler = cfg.paths.scaler_path if scaler is None else scaler
+    if isinstance(scaler, str): # 如果 scaler 是路径字符串
+            if os.path.exists(scaler):
+                try:
+                    scaler = joblib.load(scaler)
+                    log.info(f"Loaded scaler from path: {scaler}")
+                except Exception as e:
+                    log.error(f"Failed to load scaler from path {scaler}: {e}. Proceeding without scaler.")
+                    scaler = None
+            else:
+                log.warning(f"Scaler path {scaler} not found. Proceeding without scaler.")
+            scaler = None
+
+
+
     log.info(f"Starting evaluation for model_type: {model_type}")
     log.info(f"Evaluation mode: {'sliding window multi-step' if use_sliding_window else 'single-step'}")
     log.info(f"Test loader size: {len(test_loader)}")
@@ -137,28 +153,19 @@ def evaluate_model(
                     if latent_outputs.ndim == 3 and latent_outputs.shape[1] == 1:
                         latent_outputs = latent_outputs.squeeze(1)
                     
-                    outputs = autoencoder_model.decode(latent_outputs)
+                    outputs = autoencoder_model.decode(latent_outputs).cpu().numpy()
+                    batch_predictions_np = outputs
+                
                 else:  # ae_lstm
                     # AE-LSTM directly outputs in the original feature space
                     outputs = model(inputs)
                 
-                # Move to CPU and convert to numpy
-                outputs_np = outputs.cpu().numpy()
-                targets_np = targets.cpu().numpy()
-                
                 # Apply inverse normalization if scaler is provided
                 if scaler is not None:
-                    outputs_np = scaler.inverse_transform(outputs_np.reshape(-1, outputs_np.shape[-1])).reshape(outputs_np.shape)
-                    if model_type == "lstm":
-                        # For LSTM, targets are also in latent space and need decoding + inverse normalization
-                        decoded_targets = autoencoder_model.decode(targets).cpu().numpy()
-                        targets_np = scaler.inverse_transform(decoded_targets.reshape(-1, decoded_targets.shape[-1])).reshape(decoded_targets.shape)
-                    else:
-                        targets_np = scaler.inverse_transform(targets_np.reshape(-1, targets_np.shape[-1])).reshape(targets_np.shape)
-                
-                all_predictions_list.append(outputs_np)
-                all_targets_list.append(targets_np)
-        
+                    outputs = scaler.inverse_transform(outputs.reshape(-1, outputs.shape[-1])).reshape(outputs.shape)
+
+                all_predictions_list.append(outputs)
+
         else:
             # Sliding window multi-step iterative prediction
             batch_size = inputs.shape[0]
@@ -210,35 +217,21 @@ def evaluate_model(
                     multi_step_preds.reshape(-1, feature_dim)
                 ).reshape(multi_step_preds.shape)
                 
-                # Get ground truth targets for comparison
-                targets_np = targets.cpu().numpy()
-                if model_type == "lstm":
-                    # For LSTM, ground truth targets need decoding + inverse normalization
-                    decoded_targets = autoencoder_model.decode(targets).cpu().numpy()
-                    targets_np = scaler.inverse_transform(
-                        decoded_targets.reshape(-1, decoded_targets.shape[-1])
-                    ).reshape(decoded_targets.shape)
-                else:
-                    targets_np = scaler.inverse_transform(
-                        targets_np.reshape(-1, targets_np.shape[-1])
-                    ).reshape(targets_np.shape)
-            
             all_predictions_list.append(multi_step_preds)
-            all_targets_list.append(targets_np)
-    
-    if not all_targets_list or not all_predictions_list:
-        log.warning("No data collected for evaluation. Returning empty metrics.")
-        return {"metrics": {}, "predictions": np.array([]), "targets": np.array([])}
 
-    # Concatenate all batches
-    all_targets = np.concatenate(all_targets_list, axis=0)
+
+
+
+
     all_predictions = np.concatenate(all_predictions_list, axis=0)
     
-    log.info(f"Final shapes - Targets: {all_targets.shape}, Predictions: {all_predictions.shape}")
+    log.info(f"Final shapes -  Predictions: {all_predictions.shape}")
 
     # Calculate metrics
-    metrics = calculate_metrics(all_targets, all_predictions)
-    
+    y_true = targetset.tensors[0].cpu().numpy()
+    y_true = y_true[-all_predictions.shape[0]:]
+    metrics = calculate_metrics(y_true, all_predictions)
+
     log.info("Metrics calculated:")
     for metric_name, value in metrics.items():
         log.info(f"  {metric_name}: {value:.4f}")
@@ -246,7 +239,6 @@ def evaluate_model(
     return {
         "metrics": metrics,
         "predictions": all_predictions,
-        "targets": all_targets
     }
 
 
