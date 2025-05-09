@@ -4,70 +4,70 @@ defaults:
   - data: default
   - model: default
   - train: default
-  - paths: default
+  - paths: default # paths.yaml 仍然会被加载，但我们暂时避免在早期 Hydra 配置中使用其插值
   - visualization: default
   - _self_
+  - override hydra/sweeper: optuna
 
 # Hydra configuration
 hydra:
   run:
-    dir: ${paths.output_dir}/${now:%Y-%m-%d}/${now:%H-%M-%S}_${hydra.job.name}
+    # 修改：使用不依赖 ${paths.output_dir} 的相对路径或绝对路径
+    dir: "./outputs/hydra_runs/${now:%Y-%m-%d}/${now:%H-%M-%S}_${hydra.job.name}"
   job:
-    chdir: true
+    chdir: true # 通常建议为 true，这样脚本的相对路径基于原始工作目录
   sweep:
-    dir: ${paths.output_dir}/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
-    subdir: ${hydra.job.num}
-  # Optuna Sweeper Configuration
+    # 修改：使用不依赖 ${paths.output_dir} 的相对路径或绝对路径
+    dir: "./outputs/hydra_multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}"
+    subdir: ${hydra.job.num} # ${hydra.job.num} 是 Hydra 提供的，通常没问题
+
   sweeper:
-    # Use the fully qualified name
-    type: hydra_plugins.hydra_optuna_sweeper.optuna_sweeper.OptunaSweeper 
+    study_name: "ae_lstm_manual_sweep"      # 修改：硬编码
+    direction: minimize
+    n_trials: 2                             # 为了测试，保持较小值
+    # storage: "sqlite:////tmp/my_optuna_study.db" # 尝试 /tmp 目录 # 修改：硬编码，确保 ./outputs 目录存在
+    storage: null
     sampler:
-      # Use _target_ for Optuna samplers
       _target_: optuna.samplers.TPESampler
-      seed: ${experiment.seed} # Use the same seed for reproducibility
-    direction: minimize # Minimize the objective (e.g., validation/test loss/rmse)
-    study_name: ${experiment.name}_sweep
-    # Correct the storage path if needed (using path from paths/default.yaml)
-    storage: sqlite:///${paths.optuna_db} 
-    # Or keep relative to original CWD:
-    # storage: sqlite:///optuna_studies.db 
-    n_trials: 2 # Increase number of trials for better search
-    # Define hyperparameter search space
+      seed: 123                             # 修改：硬编码
     params:
-      # Autoencoder Model Params
-      model.autoencoder.latent_dim: choice(16, 32, 64, 128)
-      model.autoencoder.hidden_layers: choice("[500, 100]", "[1000, 500, 100]", "[1500, 750, 200]") # Example layer structures
-      model.autoencoder.dropout_rate: float(0.0, 0.5, step=0.1)
+      # Autoencoder Model Params - 简化搜索
+      model.autoencoder.latent_dim: choice(32, 64)  # 尝试两个常见的潜在维度
+      # model.autoencoder.hidden_layers: choice("[256, 128]", "[500, 250, 100]") # 简化隐藏层结构字符串
+      # ^^^ 注意：上面的 hidden_layers 字符串需要能被 eval() 正确解析为列表。
+      # 更安全的做法是分别优化层的数量和每层的大小，或者像下面这样固定一个或两个简单结构：
+      model.autoencoder.hidden_layers: choice("[256, 128]", "[128, 64]") # 确保能被正确解析
+      model.autoencoder.dropout_rate: float(0.1, 0.3) # 较小的 dropout 范围
 
-      # LSTM Model Params
-      model.lstm.hidden_size: choice(32, 64, 128, 256)
-      model.lstm.num_layers: choice(1, 2, 3)
-      model.lstm.dropout: float(0.0, 0.5, step=0.1)
+      # LSTM Model Params - 简化搜索
+      model.lstm.hidden_size: choice(64, 128)      # 尝试两个常见的 LSTM 隐藏层大小
+      model.lstm.num_layers: choice(1, 2)           # 1层或2层 LSTM
+      model.lstm.dropout: float(0.1, 0.3)          # 较小的 LSTM dropout 范围
 
-      # Training Params (can choose to optimize per model or globally)
-      # Example: Optimizing AE training params
-      train.autoencoder.learning_rate: float(1e-5, 1e-2, log=True)
-      train.autoencoder.optimizer.weight_decay: float(1e-6, 1e-3, log=True)
-      train.autoencoder.batch_size: choice(32, 64, 128)
+      # Training Params - 简化学习率和 batch_size 搜索
+      # Autoencoder Training
+      train.autoencoder.learning_rate: float(1e-4, 1e-3) # 较窄的学习率范围
+      # train.autoencoder.optimizer.weight_decay: float(1e-5, 1e-4, log=True) # 暂时固定或移除
+      train.autoencoder.batch_size: choice(32, 64)
 
-      # Example: Optimizing LSTM training params
-      train.lstm.learning_rate: float(1e-5, 1e-2, log=True)
-      train.lstm.optimizer.weight_decay: float(1e-6, 1e-3, log=True)
-      train.lstm.batch_size: choice(16, 32, 64)
+      # LSTM Training
+      train.lstm.learning_rate: float(1e-4, 1e-3) # 较窄的学习率范围
+      # train.lstm.optimizer.weight_decay: float(1e-5, 1e-4, log=True) # 暂时固定或移除
+      train.lstm.batch_size: choice(32, 64)
 
-      # Data Params (if needed)
-      data.sequence.sequence_length: choice(5, 10, 15)
+    # Data Params - 固定序列长度或选择较少选项
+      data.sequence.sequence_length: choice(7, 10) # 尝试两个序列长度 
 
-# Experiment settings
+# Experiment settings (这里的插值通常在应用代码中解析，问题不大)
 experiment:
   name: "ae_lstm_salinity_prediction"
   seed: 42
-  device: "cuda" # or "cpu" if no GPU available
+  device: "cuda"
 
-# Logging configuration
+# Logging configuration (这里的插值也主要在应用代码中解析)
 logging:
   level: "INFO"
-  save_dir: ${paths.output_dir}/logs
+  save_dir: ${paths.output_dir}/logs # 如果这里也导致问题，可以考虑也硬编码为 "./outputs/logs"
   use_tensorboard: true
   use_wandb: false
   wandb_project: "ae_lstm_salinity"
