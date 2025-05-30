@@ -2,13 +2,19 @@
 
 defaults:
   - data: default
-  - model: default
+  - model: default  # This will load conf/model/default.yaml
   - train: default
   - paths: default # paths.yaml 仍然会被加载，但我们暂时避免在早期 Hydra 配置中使用其插值
   - visualization: default
   - evaluation: default
   - _self_
   - override hydra/sweeper: optuna
+
+# Top-level model selector
+model:
+  name: "lstm" # Default model to run. Can be overridden to 'mamba', 'transformer', etc.
+  # Specific model configurations (autoencoder, lstm, mamba, transformer)
+  # will be loaded from conf/model/default.yaml and can be overridden here or via command line.
 
 # Hydra configuration
 hydra:

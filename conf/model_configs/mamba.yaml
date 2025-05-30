@@ -1,0 +1,22 @@
+# @package _group_
+name: mamba
+# Mamba specific parameters
+input_size: 32    # Corresponds to d_model if no input projection, set dynamically
+output_size: 32   # Set dynamically
+d_model: 64       # Mamba's internal dimension
+n_layer: 4        # Number of Mamba layers
+dt_rank: "auto"   # Rank for delta projection
+dt_min: 0.001
+dt_max: 0.1
+dt_init: "random"
+dt_scale: 1.0
+dt_init_floor: 1e-4
+d_conv: 4         # Convolution kernel size
+conv_bias: True   # Bias for convolution
+d_state: 16       # State dimension
+expand: 2         # Expansion factor
+use_fast_path: False # Set to False for minimal implementation
+layer_idx: null
+dropout: 0.1      # General dropout rate for MinimalMambaArgs's ResidualBlock
+bias: False       # Bias for linear projections within Mamba block & final output layer
+# batch_size, learning_rate, weight_decay are in train config (e.g., conf/train/mamba.yaml)

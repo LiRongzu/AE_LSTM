@@ -15,7 +15,9 @@ scaler_path: "${paths.output_dir}/scalers/target_scaler.pkl"
 model_dir: "${paths.output_dir}/models"
 ae_model_dir: "${paths.model_dir}/autoencoder"
 lstm_model_dir: "${paths.model_dir}/lstm"
-combined_model_dir: "${paths.model_dir}/ae_lstm"
+mamba_model_dir: "${paths.model_dir}/mamba"       # New
+transformer_model_dir: "${paths.model_dir}/transformer" # New
+combined_model_dir: "${paths.model_dir}/ae_lstm" # This might also need to be generalized later e.g., ae_predictive
 
 # Results and visualization directories
 results_dir: "${paths.output_dir}/results"

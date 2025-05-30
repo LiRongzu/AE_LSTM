@@ -1,0 +1,12 @@
+# @package _group_
+name: transformer
+# Transformer specific parameters
+input_size: 32    # Set dynamically
+output_size: 32   # Set dynamically
+d_model: 64       # Internal dimension of the transformer
+nhead: 4          # Number of attention heads
+num_encoder_layers: 3
+dim_feedforward: 128
+dropout: 0.1
+sequence_length: 10 # Max sequence length for positional encoding
+# batch_size, learning_rate, weight_decay are in train config (e.g., conf/train/transformer.yaml)
