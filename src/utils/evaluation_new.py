@@ -140,21 +140,10 @@ def model_inference(
         # Sliding window multi-step iterative prediction
         batch_size = inputs.shape[0]
         seq_len = inputs.shape[1]
-        input_feature_dim = inputs.shape[2]  # This is latent dimension for LSTM
-        
-        # Determine output feature dimension based on model type
-        if model_type == "lstm":
-            # LSTM with autoencoder: output will be in original feature space
-            if autoencoder_model is None:
-                raise ValueError("Autoencoder model must be provided for LSTM inference")
-            # Get the output dimension from autoencoder
-            output_feature_dim = autoencoder_model.input_dim
-        else:
-            # AE-LSTM: output is in original feature space
-            output_feature_dim = input_feature_dim
+        feature_dim = inputs.shape[2]
         
         # Initialize storage for multi-step predictions
-        multi_step_preds = np.zeros((batch_size, prediction_steps, output_feature_dim))
+        multi_step_preds = np.zeros((batch_size, prediction_steps, feature_dim))
         
         for sample_idx in range(batch_size):
             # Get single sample
@@ -174,15 +163,9 @@ def model_inference(
                             latent_pred = latent_pred.squeeze(1)
                         
                         pred = autoencoder_model.decode(latent_pred)
-                        
-                        # For rolling input update, use latent prediction (not decoded)
-                        next_input = latent_pred
                     else:  # ae_lstm
                         # AE-LSTM prediction
                         pred = model(rolling_input)
-                        
-                        # For rolling input update, use the prediction directly
-                        next_input = pred
                 
                 # Store prediction
                 multi_step_preds[sample_idx, step] = pred.cpu().numpy()
@@ -192,11 +175,11 @@ def model_inference(
                     # Shift window and add new prediction at the end
                     rolling_input = torch.cat([
                         rolling_input[:, 1:], 
-                        next_input.unsqueeze(1)
+                        pred.unsqueeze(1)
                     ], dim=1)
                 else:
                     # If sequence length is 1, just replace with new prediction
-                    rolling_input = next_input.unsqueeze(1)
+                    rolling_input = pred.unsqueeze(1)
         
         return multi_step_preds
 
@@ -234,11 +217,8 @@ def predict_with_dataloader(
     
     all_predictions = []
     
-    # Memory optimization: import garbage collection
-    import gc
-    
     with torch.no_grad():
-        for batch_idx, batch_data in enumerate(tqdm(data_loader, desc=f"Predicting with {model_type}")):
+        for batch_data in tqdm(data_loader, desc=f"Predicting with {model_type}"):
             inputs = batch_data[0].to(device)
             
             # Use the model_inference function for each batch
@@ -267,33 +247,9 @@ def predict_with_dataloader(
                     ).reshape(batch_predictions.shape)
             
             all_predictions.append(batch_predictions)
-            
-            # Memory cleanup after each batch
-            del inputs, batch_predictions
-            if batch_idx % 1 == 0:  # Clean up every batch for this small dataset
-                gc.collect()
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
     
     # Concatenate all batch predictions
     return np.concatenate(all_predictions, axis=0)
-
-def data_inverse(cfg, data):
-    scaler = cfg.paths.scaler_path 
-    if isinstance(scaler, str): # 如果 scaler 是路径字符串
-            if os.path.exists(scaler):
-                try:
-                    scaler = joblib.load(scaler)
-                    log.info(f"Loaded scaler from path: {scaler}")
-                except Exception as e:
-                    log.error(f"Failed to load scaler from path {scaler}: {e}. Proceeding without scaler.")
-                    scaler = None
-            else:
-                log.warning(f"Scaler path {scaler} not found. Proceeding without scaler.")
-                scaler = None
-
-    data = scaler.inverse_transform(data.reshape(-1, data.shape[-1])).reshape(data.shape)
-    return data
 
 
 def evaluate_model(
@@ -304,6 +260,8 @@ def evaluate_model(
     device: torch.device,
     model_type: str = "lstm",
     autoencoder_model: Optional[torch.nn.Module] = None,
+    use_sliding_window: bool = False,
+    prediction_steps: int = 1,
     scaler = None
 ) -> Dict[str, Any]:
     """
@@ -317,48 +275,57 @@ def evaluate_model(
         device: Device to run evaluation on
         model_type: Type of model to evaluate ("lstm" or "ae_lstm")
         autoencoder_model: Optional autoencoder model for decoding LSTM outputs
+        use_sliding_window: Whether to use sliding window for multi-step prediction
+        prediction_steps: Number of steps to predict in multi-step mode
+        scaler: Scaler object for inverse normalization
     
     Returns:
         Dictionary of evaluation metrics and predictions
     """
     model.eval()
+    
+    # Load scaler if path is provided
+    if scaler is None:
+        scaler = cfg.paths.scaler_path
+    
+    if isinstance(scaler, str):
+        if os.path.exists(scaler):
+            try:
+                scaler = joblib.load(scaler)
+                log.info(f"Loaded scaler from path: {scaler}")
+            except Exception as e:
+                log.error(f"Failed to load scaler from path {scaler}: {e}. Proceeding without scaler.")
+                scaler = None
+        else:
+            log.warning(f"Scaler path {scaler} not found. Proceeding without scaler.")
+            scaler = None
+
     log.info(f"Starting evaluation for model_type: {model_type}")
+    log.info(f"Evaluation mode: {'sliding window multi-step' if use_sliding_window else 'single-step'}")
     log.info(f"Test loader size: {len(test_loader)}")
 
     # Use the new predict_with_dataloader function
-    # Memory-efficient prediction with garbage collection
-    import gc
-    torch.cuda.empty_cache() if torch.cuda.is_available() else None
-    
     all_predictions = predict_with_dataloader(
         model=model,
         data_loader=test_loader,
         model_type=model_type,
         autoencoder_model=autoencoder_model,
-        use_sliding_window=cfg.evaluation.use_sliding_window,
-        prediction_steps=cfg.evaluation.prediction_steps if cfg.evaluation.use_sliding_window else 1,
+        use_sliding_window=use_sliding_window,
+        prediction_steps=prediction_steps,
         device=device,
         scaler=scaler
     )
     
     log.info(f"Final shapes - Predictions: {all_predictions.shape}")
-    
-    # Force garbage collection after predictions
-    gc.collect()
-    torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
-    # Calculate metrics with memory optimization
-    y_true = data_inverse(cfg, y_true)
+    # Calculate metrics
     y_true = y_true[-all_predictions.shape[0]:]
     
-    # Force garbage collection before metrics calculation
-    gc.collect()
-    
+    # Apply inverse normalization to y_true if scaler is provided
+    if scaler is not None:
+        y_true = scaler.inverse_transform(y_true.reshape(-1, y_true.shape[-1])).reshape(y_true.shape)
+
     metrics = calculate_metrics(y_true, all_predictions)
-    
-    # Clear intermediate variables
-    del y_true
-    gc.collect()
 
     log.info("Metrics calculated:")
     for metric_name, value in metrics.items():
@@ -368,3 +335,50 @@ def evaluate_model(
         "metrics": metrics,
         "predictions": all_predictions,
     }
+
+
+def evaluate(cfg,
+             model: torch.nn.Module,
+             test_loader: DataLoader,
+             y_true: np.ndarray,
+             device: torch.device,
+             model_type: str = "lstm",
+             autoencoder_model: Optional[torch.nn.Module] = None,
+             use_sliding_window: bool = False,
+             prediction_steps: int = 1,
+             scaler = None) -> Dict[str, Any]:
+    """
+    Wrapper for evaluate_model to handle configuration and logging.
+    
+    Args:
+        cfg: Configuration object
+        model: PyTorch model to evaluate
+        test_loader: DataLoader for evaluation
+        y_true: Ground truth values
+        device: Device to run evaluation on
+        model_type: Type of model to evaluate ("lstm" or "ae_lstm")
+        autoencoder_model: Optional autoencoder model for decoding LSTM outputs
+        use_sliding_window: Whether to use sliding window for multi-step prediction
+        prediction_steps: Number of steps to predict in multi-step mode
+        scaler: Scaler object for inverse normalization
+    
+    Returns:
+        Dictionary of evaluation metrics and predictions
+    """
+    log.info(f"Starting evaluation for {model_type} model")
+    
+    # Call the actual evaluation function
+    metrics = evaluate_model(
+        model=model,
+        test_loader=test_loader,
+        y_true=y_true,
+        cfg=cfg,
+        device=device,
+        model_type=model_type,
+        autoencoder_model=autoencoder_model,
+        use_sliding_window=use_sliding_window,
+        prediction_steps=prediction_steps,
+        scaler=scaler
+    )
+    
+    return metrics

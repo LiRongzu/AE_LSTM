@@ -9,7 +9,7 @@ log_interval: 10
 
 # Autoencoder training
 autoencoder:
-  epochs: 100
+  epochs: 5
   learning_rate: 0.001
   batch_size: 64
   early_stopping:
@@ -26,7 +26,7 @@ autoencoder:
 
 # LSTM training
 lstm:
-  epochs: 100
+  epochs: 5
   learning_rate: 0.001
   batch_size: 32
   early_stopping:
@@ -43,7 +43,7 @@ lstm:
 
 # Combined AE-LSTM training
 ae_lstm:
-  epochs: 100
+  epochs: 5
   learning_rate: 0.0005
   batch_size: 32
   early_stopping:
@@ -62,7 +62,7 @@ ae_lstm:
 hyperparameter_optimization:
   run: false
   n_trials: 50
-  timeout: 86400  # 24 hours in seconds
+  timeout: 864000  # 240 hours in seconds
   study_name: "ae_lstm_optimization"
   direction: "minimize"  # "minimize" for loss, "maximize" for accuracy
   pruner:

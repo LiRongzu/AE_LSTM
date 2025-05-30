@@ -2,6 +2,7 @@
 # main_pipeline.py - Main entry point for the AE-LSTM salinity prediction pipeline
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # 0 = all logs, 1 = filter 
 import logging
 import torch
 import numpy as np
@@ -10,6 +11,8 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
+import gc  # Add garbage collection
+import psutil  # Add process monitoring
 # Import project modules
 from src.utils.setup import (
     setup_experiment, 
@@ -29,6 +32,18 @@ from src.utils.evaluation import evaluate_model
 
 log = logging.getLogger(__name__)
 
+def log_memory_usage(stage: str):
+    """Log current memory usage"""
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    memory_percent = process.memory_percent()
+    log.info(f"[{stage}] Memory usage: {memory_info.rss / 1024 / 1024:.1f} MB ({memory_percent:.1f}%)")
+    
+    if torch.cuda.is_available():
+        gpu_memory = torch.cuda.memory_allocated() / 1024 / 1024
+        gpu_memory_max = torch.cuda.max_memory_allocated() / 1024 / 1024
+        log.info(f"[{stage}] GPU memory: {gpu_memory:.1f} MB (max: {gpu_memory_max:.1f} MB)")
+
 # Add version_base=None
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig) -> float: # Modified return type hint
@@ -46,7 +61,7 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     Args:
         cfg: Hydra configuration object
     """
-    # 1. Setup experiment
+    # 1. Setup experiment——————————————————————————————————————————
     setup_experiment(cfg)
     setup_seed(cfg.experiment.seed)
     logger = setup_logging(cfg)
@@ -54,6 +69,7 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     # Set device
     device = torch.device(cfg.experiment.device if torch.cuda.is_available() else "cpu")
     log.info(f"Using device: {device}")
+    log_memory_usage("Pipeline start")
     
     # Initialize TensorBoard if enabled
     if cfg.logging.use_tensorboard:
@@ -63,7 +79,7 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     else:
         writer = None
     
-    # 2. Data loading and preprocessing
+    # 2. Data loading and preprocessing——————————————————————————————————
     # Use EnhancedDataLoader
     data_loader = EnhancedDataLoader(cfg) 
     data = data_loader.load_data()
@@ -75,8 +91,24 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     train_dataset_ae, val_dataset_ae, test_dataset_ae = data_processor.create_ae_datasets(
         processed_data
     )
-    
-    # 3. Train or load Autoencoder
+
+    # Create data loaders
+    train_loader_ae = DataLoader(
+        train_dataset_ae, 
+        batch_size=cfg.model.autoencoder.batch_size, 
+        shuffle=True,
+        num_workers=cfg.data.loader.num_workers,
+        pin_memory=cfg.data.loader.pin_memory
+    )
+    val_loader_ae = DataLoader(
+        val_dataset_ae, 
+        batch_size=cfg.model.autoencoder.batch_size, 
+        shuffle=False,
+        num_workers=cfg.data.loader.num_workers,
+        pin_memory=cfg.data.loader.pin_memory
+    )
+
+    # 3. Train or load Autoencoder——————————————————————————————
     autoencoder = AutoencoderModel(cfg).to(device)
     
     if cfg.model.ae_lstm.use_pretrained_ae:
@@ -87,10 +119,10 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
             log.info(f"Loaded pretrained autoencoder from {ae_path}")
         else:
             log.warning(f"No pretrained autoencoder found at {ae_path}. Training new model.")
-            train_autoencoder(autoencoder, train_dataset_ae, val_dataset_ae, cfg, device, writer)
+            train_autoencoder(autoencoder, train_loader_ae, val_loader_ae, cfg, device, writer)
     else:
         # Train autoencoder from scratch
-        train_autoencoder(autoencoder, train_dataset_ae, val_dataset_ae, cfg, device, writer)
+        train_autoencoder(autoencoder, train_loader_ae, val_loader_ae, cfg, device, writer)
     
     # Generate latent representations for LSTM training
     log.info("Generating latent representations for LSTM training")
@@ -99,27 +131,38 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     )
     
     # Create sequence datasets for LSTM
-    train_dataset_lstm, val_dataset_lstm, test_dataset_lstm = data_processor.create_sequence_datasets(
+    train_sequence_lstm, val_sequence_lstm, test_sequence_lstm = data_processor.create_sequence_datasets(
         train_latent, val_latent, test_latent, processed_data
     )
 
     batch_size = cfg.model.lstm.batch_size
+
     train_loader = DataLoader(
-        train_dataset_lstm, 
+        train_sequence_lstm, 
         batch_size=batch_size, 
         shuffle=True,
         num_workers=cfg.data.loader.num_workers,
         pin_memory=cfg.data.loader.pin_memory
     )
     val_loader = DataLoader(
-        val_dataset_lstm, 
+        val_sequence_lstm, 
+        batch_size=batch_size, 
+        shuffle=False,
+        num_workers=cfg.data.loader.num_workers,
+        pin_memory=cfg.data.loader.pin_memory
+    )
+    test_loader = DataLoader(
+        test_sequence_lstm, 
         batch_size=batch_size, 
         shuffle=False,
         num_workers=cfg.data.loader.num_workers,
         pin_memory=cfg.data.loader.pin_memory
     )
 
-    # 4. Train or load LSTM
+
+    # 4. Train or load LSTM——————————————————————————————————————————————————————————
+    cfg.model.lstm.input_size = cfg.model.autoencoder.latent_dim
+    cfg.model.lstm.output_size = cfg.model.autoencoder.latent_dim
     lstm_model = LSTMModel(cfg).to(device)
     
     if cfg.model.ae_lstm.use_pretrained_lstm:
@@ -128,37 +171,40 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
         if os.path.exists(lstm_path):
             lstm_model.load_state_dict(torch.load(lstm_path, map_location=device))
             log.info(f"Loaded pretrained LSTM from {lstm_path}")
-        else:
-            log.warning(f"No pretrained LSTM found at {lstm_path}. Training new model.")
-            train_lstm(lstm_model, train_loader, val_loader, cfg, device, writer)
     else:
-        # Train LSTM from scratch
         train_lstm(lstm_model, train_loader, val_loader, cfg, device, writer)
     
-    # 5. Combined AE-LSTM model (optional fine-tuning)
+    # 5. Fine-tune AE-LSTM model (optional fine-tuning)——————————————————————————
     ae_lstm_model = AELSTMModel(autoencoder, lstm_model, cfg).to(device)
     
     if cfg.model.ae_lstm.train_ae_end_to_end:
-        # Fine-tune the combined model
         log.info("Fine-tuning the combined AE-LSTM model")
         train_ae_lstm(ae_lstm_model, train_dataset_ae, val_dataset_ae, cfg, device, writer)
     
-    # 6. Evaluation
+    # 6. Evaluation————————————————————————————
     log.info("Evaluating models")
+    log_memory_usage("Before evaluation")
     
-    if cfg.model.ae_lstm.train_ae_end_to_end:
-        # Evaluate AE-LSTM prediction
-        lstm_val_metrics = evaluate_model(
-            ae_lstm_model,
-            val_dataset_ae,
-            val_dataset_ae.tensors[0].cpu().numpy(),
+    # Force garbage collection before evaluation
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    if cfg.evaluation.use_test_set:
+        # Evaluate LSTM prediction
+        lstm_metrics = evaluate_model(
+            lstm_model,
+            test_loader,
+            test_dataset_ae.tensors[0].cpu().numpy(),
             cfg,
             device,
-            model_type="ae_lstm"
+            autoencoder_model=autoencoder,
+            model_type="lstm"
         )
-    else:
+        log_memory_usage("After test evaluation")
+    if cfg.evaluation.use_val_set:
         # Evaluate LSTM prediction
-        lstm_val_metrics = evaluate_model(
+        lstm_metrics = evaluate_model(
             lstm_model,
             val_loader,
             val_dataset_ae.tensors[0].cpu().numpy(),
@@ -166,7 +212,8 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
             device,
             autoencoder_model=autoencoder,
             model_type="lstm"
-        )
+        )       
+
 
     # Close TensorBoard writer
     if writer:
@@ -174,9 +221,7 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     
     log.info("Pipeline completed successfully!")
     
-    # Return the primary metric for Optuna optimization
-    # Assuming we want to minimize the RMSE of the final AE-LSTM prediction
-    final_metric = lstm_val_metrics['metrics'].get('rmse', float('inf')) # Default to infinity if RMSE not found
+    final_metric = lstm_metrics['metrics'].get('rmse', float('inf')) # Default to infinity if RMSE not found
     log.info(f"Returning metric for Optuna: {final_metric}")
     return final_metric
 

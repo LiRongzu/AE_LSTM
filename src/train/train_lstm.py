@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from typing import Dict, List, Tuple, Optional, Union, Any
 from omegaconf import DictConfig
+from tqdm import tqdm # Import tqdm
 from src.train.train_autoencoder import EarlyStopping  # Reuse the EarlyStopping class
 
 log = logging.getLogger(__name__)
@@ -85,7 +86,8 @@ def train_lstm(
         epoch_loss = 0.0
         
         # Training
-        for batch_idx, (inputs, targets) in enumerate(train_loader):
+        train_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]", leave=False, unit="batch")
+        for batch_idx, (inputs, targets) in enumerate(train_progress_bar):
             # Move data to device
             inputs, targets = inputs.to(device), targets.to(device)
             
@@ -103,14 +105,13 @@ def train_lstm(
             # Update statistics
             epoch_loss += loss.item()
             
-            # # Log batch progress
-            # if batch_idx % cfg.train.log_interval == 0:
-            #     log.info(f"Epoch {epoch+1}/{epochs} | Batch {batch_idx}/{len(train_loader)} | Loss: {loss.item():.6f}")
-                
-            #     # Log to TensorBoard
-            #     if writer:
-            #         global_step = epoch * len(train_loader) + batch_idx
-            #         writer.add_scalar('train/batch_loss', loss.item(), global_step)
+            # Update tqdm postfix with current batch loss
+            train_progress_bar.set_postfix(loss=f"{loss.item():.6f}")
+
+            # Log batch loss to TensorBoard (optional, for very detailed tracking)
+            if writer and cfg.logging.log_batch_metrics: # Add a config for this if desired
+                current_iter = epoch * len(train_loader) + batch_idx
+                writer.add_scalar(f'{cfg.model.lstm.name}/Loss/train_batch', loss.item(), current_iter)
         
         # Calculate average epoch loss
         avg_train_loss = epoch_loss / len(train_loader)
@@ -122,12 +123,14 @@ def train_lstm(
         all_targets = []
         all_predictions = []
         
+        val_progress_bar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]", leave=False, unit="batch")
         with torch.no_grad():
-            for val_inputs, val_targets in val_loader:
+            for val_inputs, val_targets in val_progress_bar:
                 val_inputs, val_targets = val_inputs.to(device), val_targets.to(device)
                 val_outputs = model(val_inputs)
                 val_batch_loss = criterion(val_outputs, val_targets)
                 val_loss += val_batch_loss.item()
+                val_progress_bar.set_postfix(loss=f"{val_batch_loss.item():.6f}")
                 
                 # Collect predictions and targets for metrics
                 all_targets.append(val_targets.cpu().numpy())
@@ -136,27 +139,13 @@ def train_lstm(
         # Calculate average validation loss
         avg_val_loss = val_loss / len(val_loader)
         val_losses.append(avg_val_loss)
-        
-        # Log epoch results
-        log.info(f"Epoch {epoch+1}/{epochs} complete | Train Loss: {avg_train_loss:.6f} | Val Loss: {avg_val_loss:.6f}")
-        
+                
         # Log to TensorBoard
         if writer:
-            writer.add_scalar('train/epoch_loss', avg_train_loss, epoch)
-            writer.add_scalar('val/loss', avg_val_loss, epoch)
-            
-            # Calculate and log additional metrics
-            if epoch % 5 == 0 and all_targets and all_predictions:
-                # Combine batch predictions and targets
-                all_targets = np.concatenate(all_targets, axis=0)
-                all_predictions = np.concatenate(all_predictions, axis=0)
-                
-                # Calculate MSE and MAE
-                mse = np.mean((all_targets - all_predictions) ** 2)
-                mae = np.mean(np.abs(all_targets - all_predictions))
-                
-                writer.add_scalar('val/mse', mse, epoch)
-                writer.add_scalar('val/mae', mae, epoch)
+            # Ensure cfg.model.lstm.name exists in your hydra config
+            writer.add_scalar(f'{cfg.model.lstm.name}/Loss/train_epoch', avg_train_loss, epoch + 1)
+            writer.add_scalar(f'{cfg.model.lstm.name}/Loss/val_epoch', avg_val_loss, epoch + 1)
+            writer.add_scalar(f'{cfg.model.lstm.name}/LR', optimizer.param_groups[0]['lr'], epoch + 1) # Log current LR
         
         # Learning rate scheduler step
         scheduler.step(avg_val_loss)
@@ -166,8 +155,8 @@ def train_lstm(
             best_val_loss = avg_val_loss
             best_model_path = os.path.join(cfg.paths.lstm_model_dir, "best_model.pt")
             torch.save(model.state_dict(), best_model_path)
-            log.info(f"New best model saved with val loss: {best_val_loss:.6f}")
-        
+            log.info(f"Epoch {epoch+1}/{epochs} complete | Train Loss: {avg_train_loss:.6f} | Val Loss: {avg_val_loss:.6f}")
+
         # Check for early stopping
         if early_stopping(avg_val_loss):
             log.info(f"Early stopping triggered after {epoch+1} epochs")

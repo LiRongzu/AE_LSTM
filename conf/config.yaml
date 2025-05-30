@@ -6,6 +6,7 @@ defaults:
   - train: default
   - paths: default # paths.yaml 仍然会被加载，但我们暂时避免在早期 Hydra 配置中使用其插值
   - visualization: default
+  - evaluation: default
   - _self_
   - override hydra/sweeper: optuna
 
@@ -33,9 +34,6 @@ hydra:
     params:
       # Autoencoder Model Params - 简化搜索
       model.autoencoder.latent_dim: choice(32, 64)  # 尝试两个常见的潜在维度
-      # model.autoencoder.hidden_layers: choice("[256, 128]", "[500, 250, 100]") # 简化隐藏层结构字符串
-      # ^^^ 注意：上面的 hidden_layers 字符串需要能被 eval() 正确解析为列表。
-      # 更安全的做法是分别优化层的数量和每层的大小，或者像下面这样固定一个或两个简单结构：
       model.autoencoder.hidden_layers: choice("[256, 128]", "[128, 64]") # 确保能被正确解析
       model.autoencoder.dropout_rate: float(0.1, 0.3) # 较小的 dropout 范围
 
@@ -43,7 +41,6 @@ hydra:
       model.lstm.hidden_size: choice(64, 128)      # 尝试两个常见的 LSTM 隐藏层大小
       model.lstm.num_layers: choice(1, 2)           # 1层或2层 LSTM
       model.lstm.dropout: float(0.1, 0.3)          # 较小的 LSTM dropout 范围
-
       # Training Params - 简化学习率和 batch_size 搜索
       # Autoencoder Training
       train.autoencoder.learning_rate: float(1e-4, 1e-3) # 较窄的学习率范围
@@ -72,3 +69,4 @@ logging:
   use_wandb: false
   wandb_project: "ae_lstm_salinity"
   wandb_entity: null
+  log_batch_metrics: true

@@ -1,0 +1,6 @@
+use_tensorboard: true
+use_test_set: true
+use_val_set: false
+prediction_steps: 1
+use_sliding_window: false
+sliding_window_size: 10

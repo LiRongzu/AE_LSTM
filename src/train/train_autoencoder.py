@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from typing import Dict, List, Tuple, Optional, Union, Any
 from omegaconf import DictConfig
+from tqdm import tqdm
 
 log = logging.getLogger(__name__)
 
@@ -54,8 +55,8 @@ class EarlyStopping:
 
 def train_autoencoder(
     model: nn.Module,
-    train_dataset: Dataset,
-    val_dataset: Dataset,
+    train_loader: DataLoader,
+    val_loader: DataLoader,
     cfg: DictConfig,
     device: torch.device,
     writer: Optional[SummaryWriter] = None
@@ -65,8 +66,8 @@ def train_autoencoder(
     
     Args:
         model: Autoencoder model to train
-        train_dataset: Training dataset
-        val_dataset: Validation dataset
+        train_loader: Training DataLoader
+        val_loader: Validation DataLoader
         cfg: Configuration object
         device: Device to train on
         writer: Optional TensorBoard writer
@@ -76,25 +77,9 @@ def train_autoencoder(
     """
     # Extract training parameters
     epochs = cfg.train.autoencoder.epochs
-    batch_size = cfg.model.autoencoder.batch_size
     learning_rate = cfg.model.autoencoder.learning_rate
     weight_decay = cfg.model.autoencoder.weight_decay
-    
-    # Create data loaders
-    train_loader = DataLoader(
-        train_dataset, 
-        batch_size=batch_size, 
-        shuffle=True,
-        num_workers=cfg.data.loader.num_workers,
-        pin_memory=cfg.data.loader.pin_memory
-    )
-    val_loader = DataLoader(
-        val_dataset, 
-        batch_size=batch_size, 
-        shuffle=False,
-        num_workers=cfg.data.loader.num_workers,
-        pin_memory=cfg.data.loader.pin_memory
-    )
+
     
     # Create optimizer
     optimizer = optim.Adam(
@@ -137,7 +122,8 @@ def train_autoencoder(
         epoch_loss = 0.0
         
         # Training
-        for batch_idx, batch in enumerate(train_loader):
+        train_progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]", leave=False, unit="batch")
+        for batch_idx, batch in enumerate(train_progress_bar):
             # Get data
             inputs = batch[0].to(device)
             
@@ -155,14 +141,13 @@ def train_autoencoder(
             # Update statistics
             epoch_loss += loss.item()
             
-            # # Log batch progress
-            # if batch_idx % cfg.train.log_interval == 0:
-            #     log.info(f"Epoch {epoch+1}/{epochs} | Batch {batch_idx}/{len(train_loader)} | Loss: {loss.item():.6f}")
-                
-            #     # Log to TensorBoard
-            #     if writer:
-            #         global_step = epoch * len(train_loader) + batch_idx
-            #         writer.add_scalar('train/batch_loss', loss.item(), global_step)
+            # Update tqdm postfix with current batch loss
+            train_progress_bar.set_postfix(loss=f"{loss.item():.6f}")
+
+            # Log batch loss to TensorBoard (optional, for very detailed tracking)
+            if writer and cfg.logging.log_batch_metrics: # Add a config for this if desired
+                current_iter = epoch * len(train_loader) + batch_idx
+                writer.add_scalar(f'{cfg.model.autoencoder.type}/Loss/train_batch', loss.item(), current_iter)
         
         # Calculate average epoch loss
         avg_train_loss = epoch_loss / len(train_loader)
@@ -172,24 +157,30 @@ def train_autoencoder(
         model.eval()
         val_loss = 0.0
         
+        val_progress_bar = tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]", leave=False, unit="batch")
         with torch.no_grad():
-            for val_batch in val_loader:
+            for val_batch in val_progress_bar:
                 val_inputs = val_batch[0].to(device)
                 val_outputs = model(val_inputs)
                 val_batch_loss = criterion(val_outputs, val_inputs)
                 val_loss += val_batch_loss.item()
+                val_progress_bar.set_postfix(loss=f"{val_batch_loss.item():.6f}")
         
         # Calculate average validation loss
         avg_val_loss = val_loss / len(val_loader)
         val_losses.append(avg_val_loss)
         
         # Log epoch results
-        log.info(f"Epoch {epoch+1}/{epochs} complete | Train Loss: {avg_train_loss:.6f} | Val Loss: {avg_val_loss:.6f}")
+        # log.info(f"Epoch {epoch+1}/{epochs} complete | Train Loss: {avg_train_loss:.6f} | Val Loss: {avg_val_loss:.6f}")
         
         # Log to TensorBoard
         if writer:
-            writer.add_scalar('train/epoch_loss', avg_train_loss, epoch)
-            writer.add_scalar('val/loss', avg_val_loss, epoch)
+            writer.add_scalar(f'{cfg.model.autoencoder.type}/Loss/train_epoch', avg_train_loss, epoch + 1)
+            writer.add_scalar(f'{cfg.model.autoencoder.type}/Loss/val_epoch', avg_val_loss, epoch + 1)
+            if scheduler: # If you have a learning rate scheduler
+                writer.add_scalar(f'{cfg.model.autoencoder.type}/LR', scheduler.get_last_lr()[0], epoch + 1)
+            else:
+                writer.add_scalar(f'{cfg.model.autoencoder.type}/LR', optimizer.param_groups[0]['lr'], epoch + 1)
             
             # Log sample reconstructions
             if epoch % 5 == 0:
@@ -223,7 +214,8 @@ def train_autoencoder(
             best_val_loss = avg_val_loss
             best_model_path = os.path.join(cfg.paths.ae_model_dir, "best_model.pt")
             torch.save(model.state_dict(), best_model_path)
-            log.info(f"New best model saved with val loss: {best_val_loss:.6f}")
+            log.info(f"Epoch {epoch+1}/{epochs} complete | Train Loss: {avg_train_loss:.6f} | Val Loss: {avg_val_loss:.6f}")
+            # log.info(f"New best model saved with val loss: {best_val_loss:.6f}")
         
         # Check for early stopping
         if early_stopping(avg_val_loss):

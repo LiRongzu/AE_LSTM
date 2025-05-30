@@ -6,7 +6,7 @@ figsize: [10, 8]
 fontsize: 12
 cmap: "viridis"  # Default colormap
 save_format: "png"  # Output file format (png, jpg, pdf, etc.)
-
+log_metric_frequency: 0
 # Plotting settings
 plot_settings:
   grid: true

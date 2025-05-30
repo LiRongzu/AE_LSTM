@@ -4,23 +4,24 @@
 autoencoder:
   type: "masked" # Options: standard, unet, masked
   input_dim: 201640  # Adjust based on your data dimension
-  latent_dim: 32   # Latent space dimension
+  latent_dim: 16   # Latent space dimension
   hidden_layers: [256, 128, 64]  # Encoder hidden layers
   activation: "ReLU"  # Activation function
   dropout_rate: 0.2   # Dropout rate
   learning_rate: 0.001
-  batch_size: 8
+  batch_size: 4
   weight_decay: 1e-5
 
 # LSTM configuration
 lstm:
+  name: "lstm"
   input_size: 32  # Should match autoencoder latent_dim
-  hidden_size: 64
-  num_layers: 2
+  hidden_size: 32
+  num_layers: 1
   output_size: 32  # Should match autoencoder latent_dim
   dropout: 0.1
   sequence_length: 10
-  batch_size: 32
+  batch_size: 8
   learning_rate: 0.001
   weight_decay: 1e-5
 
