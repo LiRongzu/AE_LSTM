@@ -1,57 +1,94 @@
 # Training configuration
 
 # General training settings
-epochs: 100
-early_stopping_patience: 10
-checkpoint_frequency: 5
-validate_every: 1
-log_interval: 10
+# epochs: 100 # Moved to model-specific
+# early_stopping_patience: 10 # Moved to model-specific
+checkpoint_frequency: 10 # General, but can be overridden in model-specific
+validate_every: 1 # General
+log_interval: 10 # General
 
 # Autoencoder training
 autoencoder:
-  epochs: 5
+  epochs: 50 # Increased from 5 for more realistic default
   learning_rate: 0.001
-  batch_size: 64
+  batch_size: 64 # AE batch size can be different
+  weight_decay: 1e-5 # Moved from optimizer substructure for easier access
   early_stopping:
     patience: 10
     min_delta: 0.0001
-  optimizer:
+  optimizer: # Optimizer type can remain, specific params like lr/wd moved up
     type: "Adam"
-    weight_decay: 1e-5
   scheduler:
-    type: "ReduceLROnPlateau"
+    type: "ReduceLROnPlateau" # Type can remain, specific params used directly
     patience: 5
-    factor: 0.5
+    factor: 0.5 # Renamed from factor to scheduler_factor for clarity if needed, but ReduceLROnPlateau uses 'factor'
     min_lr: 1e-6
 
 # LSTM training
 lstm:
-  epochs: 5
+  epochs: 50 # Increased from 5
   learning_rate: 0.001
   batch_size: 32
+  weight_decay: 1e-5 # Moved from optimizer substructure
   early_stopping:
     patience: 10
     min_delta: 0.0001
   optimizer:
     type: "Adam"
-    weight_decay: 1e-5
   scheduler:
     type: "ReduceLROnPlateau"
     patience: 5
     factor: 0.5
     min_lr: 1e-6
 
-# Combined AE-LSTM training
-ae_lstm:
-  epochs: 5
-  learning_rate: 0.0005
+# Mamba training (New section, copied from LSTM for now)
+mamba:
+  epochs: 50
+  learning_rate: 0.001
   batch_size: 32
+  weight_decay: 1e-5
   early_stopping:
     patience: 10
     min_delta: 0.0001
   optimizer:
     type: "Adam"
-    weight_decay: 1e-5
+  scheduler:
+    type: "ReduceLROnPlateau"
+    patience: 5
+    factor: 0.5
+    min_lr: 1e-6
+
+# Transformer training (New section, copied from LSTM for now)
+transformer:
+  epochs: 50
+  learning_rate: 0.001
+  batch_size: 32
+  weight_decay: 1e-5
+  early_stopping:
+    patience: 10
+    min_delta: 0.0001
+  optimizer:
+    type: "Adam"
+  scheduler:
+    type: "ReduceLROnPlateau"
+    patience: 5
+    factor: 0.5
+    min_lr: 1e-6
+
+# Combined AE-Predictive_Model training (Generalized from ae_lstm)
+# This section might need to be dynamic based on cfg.model.name too,
+# or have sub-sections if combined training differs significantly.
+# For now, let's keep a generic 'ae_predictive' or assume ae_lstm name is used generically.
+ae_predictive: # Renamed from ae_lstm for generality
+  epochs: 50 # Increased from 5
+  learning_rate: 0.0005
+  batch_size: 32
+  weight_decay: 1e-5 # Added for consistency
+  early_stopping:
+    patience: 10
+    min_delta: 0.0001
+  optimizer:
+    type: "Adam"
   scheduler:
     type: "ReduceLROnPlateau"
     patience: 5
@@ -63,8 +100,8 @@ hyperparameter_optimization:
   run: false
   n_trials: 50
   timeout: 864000  # 240 hours in seconds
-  study_name: "ae_lstm_optimization"
-  direction: "minimize"  # "minimize" for loss, "maximize" for accuracy
+  study_name: "ae_predictive_optimization" # Generalized name
+  direction: "minimize"
   pruner:
     type: "MedianPruner"
     n_warmup_steps: 5

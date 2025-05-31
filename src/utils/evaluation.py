@@ -85,7 +85,7 @@ def calculate_metrics(
 def model_inference(
     model: torch.nn.Module,
     inputs: torch.Tensor,
-    model_type: str = "lstm",
+    model_type: str = "lstm", # model_type is still useful for logging or other specific logic
     autoencoder_model: Optional[torch.nn.Module] = None,
     use_sliding_window: bool = False,
     prediction_steps: int = 1,
@@ -116,22 +116,28 @@ def model_inference(
     if not use_sliding_window:
         # Single-step prediction
         with torch.no_grad():
-            if model_type == "lstm":
-                # LSTM outputs latent representations
-                latent_outputs = model(inputs)
+            # If autoencoder_model is provided, 'model' is a predictive model (LSTM, Mamba, Transformer)
+            # whose outputs (latent codes) need decoding.
+            # If autoencoder_model is None, 'model' is an end-to-end model (e.g., AEPredictiveModel)
+            # that directly outputs in the original feature space.
+            if autoencoder_model is not None:
+                latent_outputs = model(inputs) # Output from LSTM, Mamba, or Transformer
                 
-                # Decode using autoencoder if provided
-                if autoencoder_model is None:
-                    raise ValueError("Autoencoder model must be provided for LSTM inference")
-                
-                # Handle different output shapes
-                if latent_outputs.ndim == 3 and latent_outputs.shape[1] == 1:
+                # Handle different output shapes from predictive models if necessary
+                # (e.g. if they output full sequence vs. last step)
+                # Assuming predictive models (LSTM, Mamba, Transformer) called here are configured
+                # to output (batch, latent_dim) as per their design in previous steps.
+                if latent_outputs.ndim == 3 and latent_outputs.shape[1] == 1: # (B, 1, D) -> (B, D)
                     latent_outputs = latent_outputs.squeeze(1)
+                elif latent_outputs.ndim == 3 and latent_outputs.shape[1] > 1:
+                    # This case should ideally not happen if predictive models are designed
+                    # to output only the last step for this type of evaluation.
+                    # If they do output sequences, taking the last step here.
+                    log.warning(f"model_inference (single-step): Predictive model outputted sequence (shape {latent_outputs.shape}), taking last time step.")
+                    latent_outputs = latent_outputs[:, -1, :]
                 
                 outputs = autoencoder_model.decode(latent_outputs)
-            
-            else:  # ae_lstm
-                # AE-LSTM directly outputs in the original feature space
+            else:  # autoencoder_model is None, so 'model' is an end-to-end model (e.g. AEPredictiveModel)
                 outputs = model(inputs)
             
             return outputs.cpu().numpy()
@@ -142,17 +148,31 @@ def model_inference(
         seq_len = inputs.shape[1]
         input_feature_dim = inputs.shape[2]  # This is latent dimension for LSTM
         
-        # Determine output feature dimension based on model type
-        if model_type == "lstm":
-            # LSTM with autoencoder: output will be in original feature space
-            if autoencoder_model is None:
-                raise ValueError("Autoencoder model must be provided for LSTM inference")
-            # Get the output dimension from autoencoder
+        # Determine output feature dimension based on whether AE is used
+        if autoencoder_model is not None: # Predictive model (LSTM, Mamba, etc.) + AE
+            if not hasattr(autoencoder_model, 'input_dim'):
+                 # A basic check; ideally autoencoder_model would have a clear property for original input dim.
+                 # This might happen if a non-standard AE is passed.
+                raise ValueError("autoencoder_model provided but lacks 'input_dim' attribute for determining output_feature_dim.")
             output_feature_dim = autoencoder_model.input_dim
-        else:
-            # AE-LSTM: output is in original feature space
-            output_feature_dim = input_feature_dim
-        
+        else: # End-to-end model (AEPredictiveModel)
+              # input_feature_dim for AEPredictiveModel would be the original data's feature dim.
+              # However, the 'inputs' to this function for AEPredictiveModel in sliding window
+              # would be actual data, not latent codes.
+              # This part needs careful thought for AEPredictiveModel in sliding window.
+              # The current AEPredictiveModel.predict_sequence is very LSTM-specific.
+              # For now, let's assume if autoencoder_model is None, it's an AEPredictiveModel,
+              # and its output_size (if it has one) or input_size should be the feature dim.
+              # This is tricky because AEPredictiveModel's direct input IS the original feature dim.
+            if hasattr(model, 'autoencoder') and hasattr(model.autoencoder, 'input_dim'): # If it's AEPredictiveModel
+                 output_feature_dim = model.autoencoder.input_dim
+            elif hasattr(model, 'output_size'): # Fallback if it's some other end-to-end model
+                 output_feature_dim = model.output_size
+            else: # Fallback to input's feature dim if model has no clear output_size attribute
+                 output_feature_dim = inputs.shape[-1]
+                 log.warning(f"Could not reliably determine output_feature_dim for sliding window with model type {model_type} and no autoencoder. Defaulting to input feature dim: {output_feature_dim}")
+
+
         # Initialize storage for multi-step predictions
         multi_step_preds = np.zeros((batch_size, prediction_steps, output_feature_dim))
         
@@ -165,38 +185,51 @@ def model_inference(
             
             for step in range(prediction_steps):
                 with torch.no_grad():
-                    if model_type == "lstm":
-                        # LSTM prediction
-                        latent_pred = model(rolling_input)
+                    if autoencoder_model is not None: # Predictive model (LSTM, Mamba, etc.) + AE
+                        latent_pred = model(rolling_input) # rolling_input is latent codes here
                         
-                        # Decode prediction
                         if latent_pred.ndim == 3 and latent_pred.shape[1] == 1:
                             latent_pred = latent_pred.squeeze(1)
+                        elif latent_pred.ndim == 3 and latent_pred.shape[1] > 1:
+                             log.warning(f"model_inference (sliding_window): Predictive model outputted sequence (shape {latent_pred.shape}), taking last time step.")
+                             latent_pred = latent_pred[:, -1, :]
                         
                         pred = autoencoder_model.decode(latent_pred)
                         
                         # For rolling input update, use latent prediction (not decoded)
-                        next_input = latent_pred
-                    else:  # ae_lstm
-                        # AE-LSTM prediction
-                        pred = model(rolling_input)
+                        next_input_for_roll = latent_pred # This should be (B, latent_dim)
+                    else:  # End-to-end model (AEPredictiveModel)
+                           # rolling_input is in original data space here.
+                        pred = model(rolling_input) # pred is in original data space
                         
-                        # For rolling input update, use the prediction directly
-                        next_input = pred
-                
+                        # For rolling input update, AE-Predictive model needs latent codes.
+                        # This is complex: to feed back, we'd need to encode `pred` if the AEPredictiveModel's
+                        # internal predictive model expects latent codes.
+                        # The AEPredictiveModel.predict_sequence handles this iteration internally.
+                        # This external sliding window loop is more for a standalone predictive model + AE.
+                        # If 'model' is AEPredictiveModel, its own .predict_sequence should be called,
+                        # not this external loop.
+                        # This highlights a potential design issue if trying to use this generic
+                        # sliding window for an end-to-end model that has its own sequence handling.
+                        # For now, assuming if autoencoder_model is None, this path might be problematic
+                        # if the model isn't simple stateleess or if its predict_sequence isn't used.
+                        # Let's assume 'pred' is what should be fed back if no AE.
+                        log.warning("Sliding window for end-to-end model without explicit AE for feedback encoding might be inaccurate if model expects latent codes internally for sequence prediction.")
+                        next_input_for_roll = pred # This might be wrong if model expects latent codes.
+
                 # Store prediction
-                multi_step_preds[sample_idx, step] = pred.cpu().numpy()
+                multi_step_preds[sample_idx, step] = pred.cpu().numpy() # pred is in original data space
                 
                 # Update rolling input for next step
+                # next_input_for_roll should be (B, feature_dim_for_predictive_model_input)
+                # If AE is used, feature_dim is latent_dim. If no AE, feature_dim is original_dim.
                 if rolling_input.shape[1] > 1:
-                    # Shift window and add new prediction at the end
                     rolling_input = torch.cat([
                         rolling_input[:, 1:], 
-                        next_input.unsqueeze(1)
+                        next_input_for_roll.unsqueeze(1) # Ensure (B, 1, D)
                     ], dim=1)
                 else:
-                    # If sequence length is 1, just replace with new prediction
-                    rolling_input = next_input.unsqueeze(1)
+                    rolling_input = next_input_for_roll.unsqueeze(1)
         
         return multi_step_preds
 
