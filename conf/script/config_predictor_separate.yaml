@@ -1,0 +1,40 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - paths: default
+  - data: default
+  # model: default will bring in model.name, model.autoencoder, model.network_params (after override)
+  # model.name will determine which predictor we are training.
+  # model.autoencoder might be used to get details about the AE architecture if needed (e.g. latent_dim)
+  # model.network_params will be populated by model_configs/${model.name}.yaml
+  - model: default
+  # train: default will bring in train.[model_name] for the specific predictor's training params
+  # and train.autoencoder (though not directly used for training predictor, might be for reference)
+  - train: default
+
+# Parameters specific to this script's execution
+script:
+  # Specify the pre-trained Autoencoder to use for generating latent features
+  # Option 1: Load AE based on its configuration hash from the central store
+  ae_config_hash_to_load: null # Example: "abcdef12345..." (string or null)
+  # Option 2: Load AE from a specific path (overrides hash if both provided)
+  ae_model_path_to_load: null # Example: "/path/to/specific/ae_model.pt" (string or null)
+
+  force_retrain_predictor: false # Whether to retrain predictor even if a model with the same config hash exists
+
+# Hydra output directories for this specific script
+hydra:
+  run:
+    dir: ${paths.output_dir}/hydra_runs/train_predictor_separately/${now:%Y-%m-%d}/${now:%H-%M-%S}_${model.name}
+  job:
+    name: train_predictor_script # Default job name
+
+# model.name (e.g., "lstm", "mamba") should be set via command line or by this file
+# if we want to fix which predictor this script trains by default.
+# For flexibility, it's often better to require it from command line:
+# python scripts/train_predictor_separately.py model.name=lstm script.ae_config_hash_to_load=...
+
+# If you want to set a default model.name for this script configuration:
+# model:
+#   name: "lstm" # Default predictor model for this script run

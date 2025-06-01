@@ -117,14 +117,14 @@ class AutoencoderModel(nn.Module):
     """
     Standard autoencoder model combining encoder and decoder.
     """
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, ae_cfg: DictConfig): # Changed signature
         super(AutoencoderModel, self).__init__()
-        self.cfg = cfg
-        self.input_dim = cfg.model.autoencoder.input_dim
-        self.latent_dim = cfg.model.autoencoder.latent_dim
-        self.hidden_layers = cfg.model.autoencoder.hidden_layers
-        self.activation = cfg.model.autoencoder.activation
-        self.dropout_rate = cfg.model.autoencoder.dropout_rate
+        self.cfg = ae_cfg # Storing it as self.cfg for minimal internal change, but it's the ae_cfg
+        self.input_dim = ae_cfg.input_dim
+        self.latent_dim = ae_cfg.latent_dim
+        self.hidden_layers = list(ae_cfg.hidden_layers) # Ensure it's a list
+        self.activation = ae_cfg.activation
+        self.dropout_rate = ae_cfg.dropout_rate
         
         # Create encoder and decoder
         self.encoder = Encoder(
@@ -162,11 +162,11 @@ class UNetAutoencoder(nn.Module):
     """
     U-Net style autoencoder model for spatial data.
     """
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, ae_cfg: DictConfig): # Changed signature
         super(UNetAutoencoder, self).__init__()
-        self.cfg = cfg
-        self.input_dim = cfg.model.autoencoder.input_dim
-        self.latent_dim = cfg.model.autoencoder.latent_dim
+        self.cfg = ae_cfg # Storing it as self.cfg
+        self.input_dim = ae_cfg.input_dim
+        self.latent_dim = ae_cfg.latent_dim
         
         # Calculate spatial dimensions assuming the input is a square grid
         # This is an example for a 2D grid
@@ -260,8 +260,8 @@ class MaskedAutoencoder(AutoencoderModel):
     """
     Masked autoencoder that can handle missing data.
     """
-    def __init__(self, cfg: DictConfig):
-        super(MaskedAutoencoder, self).__init__(cfg)
+    def __init__(self, ae_cfg: DictConfig): # Changed signature
+        super(MaskedAutoencoder, self).__init__(ae_cfg) # Pass ae_cfg to parent
         
     def forward(self, x: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
@@ -284,24 +284,25 @@ class MaskedAutoencoder(AutoencoderModel):
         return x_recon
 
 
-def get_autoencoder_model(cfg: DictConfig) -> nn.Module:
+def get_autoencoder_model(ae_cfg: DictConfig) -> nn.Module: # Changed signature
     """
     Factory function to create appropriate autoencoder model.
     
     Args:
-        cfg: Configuration object
+        ae_cfg: Autoencoder-specific configuration object
     
     Returns:
         Autoencoder model instance
     """
-    ae_type = cfg.model.autoencoder.type.lower()
+    ae_type = ae_cfg.type.lower() # Access type directly from ae_cfg
+    log.info(f"Creating autoencoder of type: {ae_type} with input_dim: {ae_cfg.input_dim}") # Log using ae_cfg
     
     if ae_type == "standard":
-        return AutoencoderModel(cfg)
+        return AutoencoderModel(ae_cfg) # Pass ae_cfg
     elif ae_type == "unet":
-        return UNetAutoencoder(cfg)
+        return UNetAutoencoder(ae_cfg) # Pass ae_cfg
     elif ae_type == "masked":
-        return MaskedAutoencoder(cfg)
+        return MaskedAutoencoder(ae_cfg) # Pass ae_cfg
     else:
         log.warning(f"Unknown autoencoder type: {ae_type}, using standard")
-        return AutoencoderModel(cfg)
+        return AutoencoderModel(ae_cfg) # Pass ae_cfg

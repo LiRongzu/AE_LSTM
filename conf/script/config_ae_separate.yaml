@@ -1,0 +1,42 @@
+# @package _global_
+# This ensures that this config file can still access configurations defined at the root level of 'conf'
+# if needed, and that its output directory structure with Hydra might be relative to the main project outputs.
+
+defaults:
+  - _self_ # Allows defining new params in this file directly
+  - paths: default
+  - data: default
+  # For model, we only need the autoencoder part.
+  # We assume 'conf/model/default.yaml' defines 'autoencoder' block.
+  - model: default
+  # For train, we only need the autoencoder training part.
+  # We assume 'conf/train/default.yaml' defines 'autoencoder' block.
+  - train: default
+  # Optional: If specific logging or experiment setup is needed for this script
+  # - experiment: default_experiment_settings # if you have a common experiment setting file
+  # - logging: default_logging # if you have a common logging setting file
+
+# Parameters specific to this script's execution
+script:
+  force_retrain: false # Whether to retrain even if a model with the same config hash exists
+  # Add any other script-specific controls here, e.g., for loading specific AE versions later
+
+# Ensure Hydra output directories are well-defined for this script
+hydra:
+  run:
+    dir: ${paths.output_dir}/hydra_runs/train_ae_separately/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job:
+    # Name of the job, can be useful for logging and output directory naming.
+    # Defaults to the script name usually, but can be overridden.
+    name: train_ae_script
+
+# Example of how to ensure only relevant parts of model/train are loaded if they were structured with groups:
+# If 'conf/model/default.yaml' had a group 'autoencoder_configs':
+# defaults:
+#   - model/autoencoder_configs@model.autoencoder: default_ae # loads default_ae from that group
+# Similar for train.
+
+# Given the current structure where 'model: default' loads 'conf/model/default.yaml' which contains
+# the 'autoencoder' block, and 'train: default' loads 'conf/train/default.yaml' which contains
+# its 'autoencoder' block, the simple includes above are fine.
+# The script will then access cfg.model.autoencoder and cfg.train.autoencoder.

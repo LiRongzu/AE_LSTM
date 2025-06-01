@@ -110,7 +110,7 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     )
 
     # 3. Train or load Autoencoder——————————————————————————————
-    autoencoder = AutoencoderModel(cfg).to(device)
+    autoencoder = AutoencoderModel(cfg.model.autoencoder).to(device)
     
     train_autoencoder(autoencoder, train_loader_ae, val_loader_ae, cfg, device, writer)
 
