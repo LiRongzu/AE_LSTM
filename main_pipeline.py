@@ -96,14 +96,14 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     # Create data loaders
     train_loader_ae = DataLoader(
         train_dataset_ae, 
-        batch_size=cfg.model.autoencoder.batch_size, 
+        batch_size=cfg.train.autoencoder.batch_size, 
         shuffle=True,
         num_workers=cfg.data.loader.num_workers,
         pin_memory=cfg.data.loader.pin_memory
     )
     val_loader_ae = DataLoader(
         val_dataset_ae, 
-        batch_size=cfg.model.autoencoder.batch_size, 
+        batch_size=cfg.train.autoencoder.batch_size, 
         shuffle=False,
         num_workers=cfg.data.loader.num_workers,
         pin_memory=cfg.data.loader.pin_memory
@@ -112,19 +112,9 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     # 3. Train or load Autoencoder——————————————————————————————
     autoencoder = AutoencoderModel(cfg).to(device)
     
-    if cfg.model.ae_lstm.use_pretrained_ae:
-        # Load pretrained autoencoder
-        ae_path = os.path.join(cfg.paths.ae_model_dir, "best_model.pt")
-        if os.path.exists(ae_path):
-            autoencoder.load_state_dict(torch.load(ae_path, map_location=device))
-            log.info(f"Loaded pretrained autoencoder from {ae_path}")
-        else:
-            log.warning(f"No pretrained autoencoder found at {ae_path}. Training new model.")
-            train_autoencoder(autoencoder, train_loader_ae, val_loader_ae, cfg, device, writer)
-    else:
-        # Train autoencoder from scratch
-        train_autoencoder(autoencoder, train_loader_ae, val_loader_ae, cfg, device, writer)
-    
+    train_autoencoder(autoencoder, train_loader_ae, val_loader_ae, cfg, device, writer)
+
+    active_model_name = cfg.model.name.lower()
     # Generate latent representations for predictive model training
     log.info(f"Generating latent representations for {active_model_name.upper()} training") # Generalized log
     train_latent, val_latent, test_latent = data_processor.generate_latent_representations(
@@ -139,6 +129,7 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
     # Get batch_size from the active predictive model's training configuration
     # This assumes batch_size is defined under cfg.train[active_model_name].batch_size
     active_train_cfg = cfg.train[active_model_name]
+    active_model_cfg = cfg.model[active_model_name]
     predictive_model_batch_size = active_train_cfg.batch_size
 
     train_loader = DataLoader(
@@ -165,17 +156,16 @@ def main(cfg: DictConfig) -> float: # Modified return type hint
 
 
     # 4. Train or load Predictive Model (LSTM, Mamba, Transformer)————————————————————
-    active_model_name = cfg.model.name.lower()
     log.info(f"Active model type: {active_model_name}")
 
     # Dynamically set input_size and output_size for the chosen predictive model
     # These keys (input_size, output_size) are expected to be directly under cfg.model
     # as they are loaded from the selected model_configs/*.yaml file.
-    cfg.model.input_size = cfg.model.autoencoder.latent_dim
-    cfg.model.output_size = cfg.model.autoencoder.latent_dim
+    active_model_cfg.input_size = cfg.model.autoencoder.latent_dim
+    active_model_cfg.output_size = cfg.model.autoencoder.latent_dim
 
     # Log the updated sizes for the active model
-    log.info(f"Setting input_size={cfg.model.input_size}, output_size={cfg.model.output_size} for {active_model_name} model based on AE latent_dim.")
+    log.info(f"Setting input_size={active_model_cfg.input_size}, output_size={active_model_cfg.output_size} for {active_model_name} model based on AE latent_dim.")
 
     model = get_model(cfg).to(device) # Instantiating the model using the factory
     

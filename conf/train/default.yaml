@@ -9,7 +9,7 @@ log_interval: 10 # General
 
 # Autoencoder training
 autoencoder:
-  epochs: 50 # Increased from 5 for more realistic default
+  epochs: 5 # Increased from 5 for more realistic default
   learning_rate: 0.001
   batch_size: 64 # AE batch size can be different
   weight_decay: 1e-5 # Moved from optimizer substructure for easier access
@@ -26,7 +26,7 @@ autoencoder:
 
 # LSTM training
 lstm:
-  epochs: 50 # Increased from 5
+  epochs: 5 # Increased from 5
   learning_rate: 0.001
   batch_size: 32
   weight_decay: 1e-5 # Moved from optimizer substructure
@@ -43,7 +43,7 @@ lstm:
 
 # Mamba training (New section, copied from LSTM for now)
 mamba:
-  epochs: 50
+  epochs: 5
   learning_rate: 0.001
   batch_size: 32
   weight_decay: 1e-5
@@ -60,7 +60,7 @@ mamba:
 
 # Transformer training (New section, copied from LSTM for now)
 transformer:
-  epochs: 50
+  epochs: 5
   learning_rate: 0.001
   batch_size: 32
   weight_decay: 1e-5

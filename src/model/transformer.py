@@ -35,18 +35,17 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class TransformerModel(nn.Module):
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, model_cfg: DictConfig):
         super(TransformerModel, self).__init__()
-        self.cfg = cfg
-        self.model_cfg = cfg.model.transformer
+        self.model_cfg = model_cfg
 
-        self.input_size = self.model_cfg.input_size
-        self.d_model = self.model_cfg.d_model
-        self.nhead = self.model_cfg.nhead
-        self.num_encoder_layers = self.model_cfg.num_encoder_layers
-        self.dim_feedforward = self.model_cfg.dim_feedforward
-        self.dropout = self.model_cfg.dropout
-        self.output_size = self.model_cfg.output_size
+        self.input_size = model_cfg.input_size
+        self.d_model = model_cfg.d_model
+        self.nhead = model_cfg.nhead
+        self.num_encoder_layers = model_cfg.num_encoder_layers
+        self.dim_feedforward = model_cfg.dim_feedforward
+        self.dropout = model_cfg.dropout
+        self.output_size = model_cfg.output_size
 
         self.input_fc = nn.Linear(self.input_size, self.d_model)
         self.pos_encoder = PositionalEncoding(self.d_model, self.dropout)
@@ -113,7 +112,7 @@ if __name__ == '__main__':
     log.info("Starting TransformerModel test...")
     # Instantiate TransformerModel
     try:
-        model = TransformerModel(dummy_cfg)
+        model = TransformerModel(dummy_cfg.model.transformer)
         log.info("TransformerModel instantiated successfully.")
     except Exception as e:
         log.error(f"Error instantiating TransformerModel: {e}", exc_info=True)

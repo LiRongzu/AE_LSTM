@@ -115,21 +115,19 @@ class ResidualBlock(nn.Module):
 
 # --- Main MambaModel (adapted from johnma2006/mamba-minimal Mamba class) ---
 class MambaModel(nn.Module):
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, model_cfg: DictConfig):
         super().__init__()
 
-        # Extract parameters from Hydra config
-        # These names should align with what's expected in your Hydra YAML
-        mamba_cfg = cfg.model.mamba
+        # Extract parameters from model config (now cfg.model directly)
         args = MinimalMambaArgs(
-            d_model=mamba_cfg.d_model,
-            n_layer=mamba_cfg.n_layer,
-            d_state=mamba_cfg.d_state,
-            expand=mamba_cfg.expand,
-            dt_rank=mamba_cfg.dt_rank if hasattr(mamba_cfg, 'dt_rank') else 'auto',
-            d_conv=mamba_cfg.d_conv,
-            conv_bias=mamba_cfg.conv_bias if hasattr(mamba_cfg, 'conv_bias') else True,
-            bias=mamba_cfg.bias if hasattr(mamba_cfg, 'bias') else False,
+            d_model=model_cfg.d_model,
+            n_layer=model_cfg.n_layer,
+            d_state=model_cfg.d_state,
+            expand=model_cfg.expand,
+            dt_rank=model_cfg.dt_rank if hasattr(model_cfg, 'dt_rank') else 'auto',
+            d_conv=model_cfg.d_conv,
+            conv_bias=model_cfg.conv_bias if hasattr(model_cfg, 'conv_bias') else True,
+            bias=model_cfg.bias if hasattr(model_cfg, 'bias') else False,
         )
         self.args = args
 
@@ -140,12 +138,11 @@ class MambaModel(nn.Module):
         self.norm_f = RMSNorm(args.d_model)
 
         # Removed lm_head as this model is for feature extraction/prediction, not language modeling
-        # self.lm_head = nn.Linear(args.d_model, args.vocab_size, bias=False)
-        # if cfg.model.mamba.tie_weights and hasattr(self.embedding, 'weight'):
+        # if model_cfg.tie_weights and hasattr(self.embedding, 'weight'):
         #    self.lm_head.weight = self.embedding.weight
 
         # Add the output linear layer
-        self.output_size = mamba_cfg.output_size # Get output_size from config
+        self.output_size = model_cfg.output_size # Get output_size from config
         self.out_fc = nn.Linear(self.args.d_model, self.output_size)
 
         logger.info(f"MambaModel (minimal) initialized with args: {self.args}, output_size: {self.output_size}")
@@ -191,12 +188,12 @@ if __name__ == '__main__':
     })
 
     # Instantiate the model
-    model = MambaModel(cfg)
+    model = MambaModel(cfg.model)
 
     # Create a dummy input tensor
     batch_size = 4
     seq_len = 20
-    input_size = cfg.model.mamba.d_model # d_model is the feature size per timestep
+    input_size = cfg.model.d_model # d_model is the feature size per timestep
 
     dummy_input = torch.randn(batch_size, seq_len, input_size)
     logger.info(f"Test input shape: {dummy_input.shape}")
@@ -207,7 +204,7 @@ if __name__ == '__main__':
         logger.info(f"Test output shape: {output.shape}")
 
         # Check if output shape is as expected (batch_size, output_size)
-        expected_output_shape = (batch_size, cfg.model.mamba.output_size)
+        expected_output_shape = (batch_size, cfg.model.output_size)
         if output.shape == expected_output_shape:
             logger.info("MambaModel (minimal) with output layer test successful!")
         else:

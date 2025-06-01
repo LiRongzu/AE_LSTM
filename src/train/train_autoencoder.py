@@ -77,8 +77,8 @@ def train_autoencoder(
     """
     # Extract training parameters
     epochs = cfg.train.autoencoder.epochs
-    learning_rate = cfg.model.autoencoder.learning_rate
-    weight_decay = cfg.model.autoencoder.weight_decay
+    learning_rate = cfg.train.autoencoder.learning_rate
+    weight_decay = cfg.train.autoencoder.weight_decay
 
     
     # Create optimizer

@@ -14,16 +14,16 @@ class LSTMModel(nn.Module):
     """
     LSTM model for time series prediction.
     """
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, model_cfg: DictConfig):
         super(LSTMModel, self).__init__()
-        self.cfg = cfg
+        self.cfg = model_cfg
         
-        # LSTM parameters
-        self.input_size = cfg.model.lstm.input_size # 这应该是潜在变量的维度
-        self.hidden_size = cfg.model.lstm.hidden_size
-        self.num_layers = cfg.model.lstm.num_layers
-        self.output_size = cfg.model.lstm.output_size # 这通常与 input_size 相同，如果LSTM预测的是下一个潜在状态
-        self.dropout = cfg.model.lstm.dropout
+        # LSTM parameters - now directly from model_cfg (which is cfg.model)
+        self.input_size = model_cfg.input_size # Set dynamically in main_pipeline.py
+        self.hidden_size = model_cfg.hidden_size
+        self.num_layers = model_cfg.num_layers
+        self.output_size = model_cfg.output_size # Set dynamically in main_pipeline.py
+        self.dropout = model_cfg.dropout
         
         # Layer Normalization for the input
         # LayerNorm 会对最后一个维度（input_size/特征维度）进行归一化
@@ -117,16 +117,16 @@ class BidirectionalLSTM(nn.Module):
     """
     Bidirectional LSTM model for time series prediction.
     """
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, model_cfg: DictConfig):
         super(BidirectionalLSTM, self).__init__()
-        self.cfg = cfg
+        self.cfg = model_cfg
         
-        # Model parameters
-        self.input_size = cfg.model.lstm.input_size
-        self.hidden_size = cfg.model.lstm.hidden_size
-        self.num_layers = cfg.model.lstm.num_layers
-        self.output_size = cfg.model.lstm.output_size
-        self.dropout = cfg.model.lstm.dropout
+        # Model parameters - now directly from model_cfg (which is cfg.model)
+        self.input_size = model_cfg.input_size
+        self.hidden_size = model_cfg.hidden_size
+        self.num_layers = model_cfg.num_layers
+        self.output_size = model_cfg.output_size
+        self.dropout = model_cfg.dropout
         
         # LSTM layer
         self.lstm = nn.LSTM(
@@ -164,16 +164,16 @@ class AttentionLSTM(nn.Module):
     """
     LSTM model with attention mechanism.
     """
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, model_cfg: DictConfig):
         super(AttentionLSTM, self).__init__()
-        self.cfg = cfg
+        self.cfg = model_cfg
         
-        # Model parameters
-        self.input_size = cfg.model.lstm.input_size
-        self.hidden_size = cfg.model.lstm.hidden_size
-        self.num_layers = cfg.model.lstm.num_layers
-        self.output_size = cfg.model.lstm.output_size
-        self.dropout = cfg.model.lstm.dropout
+        # Model parameters - now directly from model_cfg (which is cfg.model)
+        self.input_size = model_cfg.input_size
+        self.hidden_size = model_cfg.hidden_size
+        self.num_layers = model_cfg.num_layers
+        self.output_size = model_cfg.output_size
+        self.dropout = model_cfg.dropout
         
         # LSTM layer
         self.lstm = nn.LSTM(
@@ -230,14 +230,14 @@ def get_lstm_model(cfg: DictConfig) -> nn.Module:
     Returns:
         LSTM model instance
     """
-    lstm_type = cfg.model.lstm.get("type", "standard").lower()
+    lstm_type = cfg.model.get("type", "standard").lower()
     
     if lstm_type == "standard":
-        return LSTMModel(cfg)
+        return LSTMModel(cfg.model)
     elif lstm_type == "bidirectional":
-        return BidirectionalLSTM(cfg)
+        return BidirectionalLSTM(cfg.model)
     elif lstm_type == "attention":
-        return AttentionLSTM(cfg)
+        return AttentionLSTM(cfg.model)
     else:
         log.warning(f"Unknown LSTM type: {lstm_type}, using standard")
-        return LSTMModel(cfg)
+        return LSTMModel(cfg.model)

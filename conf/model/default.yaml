@@ -1,37 +1,13 @@
-# conf/model/default.yaml
-# This file defines shared model component configurations and sets a default predictive model.
-
 defaults:
-  - model_config: lstm # Default predictive model configuration from conf/model_configs/
-                        # To override, use CLI: model/model_config=mamba or model/model_config=transformer
-  - _self_            # Ensures that other keys in this file (autoencoder, ae_predictive) are loaded.
+  - _self_
 
-# Autoencoder configuration (remains here as it's a common component)
 autoencoder:
   type: "masked"
-  input_dim: 201640 # Adjust based on your data dimension
+  input_dim: 201640
   latent_dim: 16
   hidden_layers: [256, 128, 64]
   activation: "ReLU"
   dropout_rate: 0.2
-  # learning_rate, batch_size, weight_decay for AE are in conf/train/default.yaml under 'autoencoder' section
 
-# Combined AE-Predictive model configuration (remains here)
-ae_predictive:
-  use_pretrained_ae: false
-  use_pretrained_predictive_model: false # This flag is for the predictive model part
-  train_ae_end_to_end: false
-  additional_input_features: 0
-
-# The chosen model_config (e.g., lstm.yaml via `defaults`) will be merged here.
-# This means cfg.model will contain keys from lstm.yaml (like name, hidden_size),
-# alongside autoencoder and ae_predictive.
-# For example, if model_config=lstm:
-# cfg.model.name will be 'lstm'
-# cfg.model.hidden_size will be available (from lstm.yaml)
-# cfg.model.autoencoder.latent_dim will be available.
-
-# Sections for lstm, mamba, transformer specific model parameters are now removed from this file
-# and exist in conf/model_configs/lstm.yaml, etc.
-# Their respective parameters (e.g. hidden_size for lstm, d_model for mamba)
-# will be loaded directly into the 'model' node based on the selection.
+name: "lstm" # This acts as a default if model.name is not in conf/config.yaml
+             # and is part of what _self_ merges.
