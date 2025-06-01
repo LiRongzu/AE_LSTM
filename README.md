@@ -95,21 +95,21 @@ pip install flash-attn
 python main_pipeline.py
 
 # Run with specific model type
-python main_pipeline.py model_type=mamba
-python main_pipeline.py model_type=transformer
+python main_pipeline.py model.name=mamba
+python main_pipeline.py model.name=transformer
 ```
 
 ### Model-Specific Configurations
 
 ```bash
 # LSTM with specific parameters
-python main_pipeline.py model_type=lstm model_configs=lstm train.epochs=100
+python main_pipeline.py model.name=lstm model_configs=lstm train.epochs=100
 
 # Mamba with custom state size
-python main_pipeline.py model_type=mamba model_configs=mamba model_configs.d_state=32
+python main_pipeline.py model.name=mamba model_configs=mamba model_configs.d_state=32
 
 # Transformer with different attention heads
-python main_pipeline.py model_type=transformer model_configs=transformer model_configs.n_heads=12
+python main_pipeline.py model.name=transformer model_configs=transformer model_configs.n_heads=12
 ```
 
 ### Training Configuration
@@ -145,7 +145,7 @@ python main_pipeline.py --multirun \
   model_configs.hidden_size=choice(64,128,256)
 
 # Model comparison
-python main_pipeline.py --multirun model_type=lstm,mamba,transformer
+python main_pipeline.py --multirun model.name=lstm,mamba,transformer
 ```
 
 ## Configuration Management

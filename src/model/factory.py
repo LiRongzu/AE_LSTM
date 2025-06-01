@@ -31,35 +31,39 @@ def get_model(cfg: DictConfig) -> nn.Module:
     # cfg.model now directly contains the specific parameters for the active model
     # (e.g., input_size, hidden_size for lstm, d_model for mamba, etc.)
     # as they are merged from conf/model/model_configs/<model_name>.yaml into cfg.model
-    model_specific_cfg = cfg.model
+    # Changed line: model_specific_cfg now points to the namespaced parameters
+    model_specific_cfg = cfg.model.network_params
 
     log.info(f"Attempting to initialize model: {model_name}")
-    log.debug(f"Model configuration: {OmegaConf.to_yaml(model_specific_cfg)}")
+    # Debug log should show the namespaced config
+    log.debug(f"Model specific configuration under network_params: {OmegaConf.to_yaml(model_specific_cfg)}")
 
     if model_name == 'lstm':
-        # LSTM type is now directly in cfg.model.type (not cfg.model.lstm.type)
+        # LSTM type is now directly in model_specific_cfg.type (e.g. network_params.type)
+        # This assumes that 'type' for LSTM (standard, bidirectional, attention)
+        # is defined within the lstm.yaml file itself.
         lstm_type = model_specific_cfg.get("type", "standard").lower()
         
         if lstm_type == "standard":
-            log.info(f"Initializing Standard LSTM model from factory.")
-            return LSTMModel(model_specific_cfg)
+            log.info(f"Initializing Standard LSTM model from factory with network_params.")
+            return LSTMModel(model_specific_cfg) # LSTMModel receives only its specific params
         elif lstm_type == "bidirectional":
-            log.info(f"Initializing Bidirectional LSTM model from factory.")
+            log.info(f"Initializing Bidirectional LSTM model from factory with network_params.")
             return BidirectionalLSTM(model_specific_cfg)
         elif lstm_type == "attention":
-            log.info(f"Initializing Attention LSTM model from factory.")
+            log.info(f"Initializing Attention LSTM model from factory with network_params.")
             return AttentionLSTM(model_specific_cfg)
         else:
             log.error(f"Unknown LSTM type specified in config: {lstm_type}")
             raise ValueError(f"Unknown LSTM type: {lstm_type}")
             
     elif model_name == 'mamba':
-        log.info(f"Initializing Mamba model from factory.")
-        return MambaModel(model_specific_cfg)
+        log.info(f"Initializing Mamba model from factory with network_params.")
+        return MambaModel(model_specific_cfg) # MambaModel receives only its specific params
         
     elif model_name == 'transformer':
-        log.info(f"Initializing Transformer model from factory.")
-        return TransformerModel(model_specific_cfg)
+        log.info(f"Initializing Transformer model from factory with network_params.")
+        return TransformerModel(model_specific_cfg) # TransformerModel receives only its specific params
         
     else:
         log.error(f"Unsupported model name specified in config: {model_name}")

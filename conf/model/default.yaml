@@ -9,5 +9,16 @@ autoencoder:
   activation: "ReLU"
   dropout_rate: 0.2
 
-name: "lstm" # This acts as a default if model.name is not in conf/config.yaml
-             # and is part of what _self_ merges.
+# Configuration for the combined Autoencoder-Predictive model
+ae_predictive:
+  # Whether to load a pre-trained version of the predictive model (e.g., LSTM, Mamba)
+  # when initializing the combined AEPredictiveModel.
+  use_pretrained_predictive_model: false
+
+  # Whether to fine-tune the entire AEPredictiveModel (both AE and predictive parts) end-to-end.
+  train_ae_end_to_end: false
+
+# The 'name' field for selecting model type (e.g., lstm, mamba) has been removed from here.
+# It is now solely controlled by 'model.name' in the main 'conf/config.yaml'
+# or via command-line overrides, which then loads the specific model's parameters
+# from 'conf/model/model_configs/*.yaml' into 'cfg.model.network_params'.

@@ -15,7 +15,8 @@ defaults:
   - visualization: default
   - evaluation: default
   - override hydra/sweeper: optuna
-  - override model/model_configs@model: ${model.name}
+  # Changed line:
+  - override model/model_configs@model.network_params: ${model.name}
 
 model:
   name: "lstm" # Default model to run. Can be overridden to 'mamba', 'transformer', etc.
