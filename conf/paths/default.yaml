@@ -27,3 +27,8 @@ visualization_dir: "${paths.output_dir}/visualizations"
 logs_dir: "${paths.output_dir}/logs"
 tensorboard_dir: "${paths.output_dir}/tensorboard"
 optuna_db: "${paths.output_dir}/optuna.db"
+
+# Centralized Model Storage
+central_model_storage_dir: "central_storage"  # Root directory for centrally stored models
+ae_metadata_csv_filename: "ae_models_metadata.csv" # Filename for AE metadata, will be joined with a base log/meta path
+predictor_metadata_csv_filename: "predictor_models_metadata.csv" # Filename for predictor metadata
